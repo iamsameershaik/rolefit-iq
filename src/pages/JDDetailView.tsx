@@ -1,0 +1,311 @@
+import { useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import RetroColorBars from '../components/brand/RetroColorBars';
+import JDSelector from '../components/detail/JDSelector';
+import JDDetailHeader from '../components/detail/JDDetailHeader';
+import JDDetailTabs from '../components/detail/JDDetailTabs';
+import Badge from '../components/shared/Badge';
+import type { Page } from '../types';
+import { jdAnalyses } from '../data/mockData';
+
+type Tab = 'overview' | 'evidence' | 'gaps' | 'interview' | 'rewrite';
+
+interface Props {
+  onNavigate: (page: Page, jdId?: string) => void;
+  initialJdId?: string;
+}
+
+export default function JDDetailView({ onNavigate, initialJdId }: Props) {
+  const [selectedId, setSelectedId] = useState(initialJdId ?? jdAnalyses[0].id);
+  const [activeTab, setActiveTab] = useState<Tab>('overview');
+
+  const analysis = jdAnalyses.find((j) => j.id === selectedId) ?? jdAnalyses[0];
+
+  return (
+    <div className="bg-[#F4F1EA] min-h-screen">
+      {/* Header */}
+      <div className="border-b border-[#DDD8CE] bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
+          <button
+            onClick={() => onNavigate('results')}
+            className="flex items-center gap-1.5 text-xs font-mono text-[#9A958F] hover:text-[#111111] transition-colors uppercase tracking-widest mb-4 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#111111] rounded-sm"
+            aria-label="Back to results dashboard"
+          >
+            <ArrowLeft className="w-3 h-3" aria-hidden="true" />
+            results dashboard
+          </button>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862] mb-1">
+            RFQ-JD-DETAIL
+          </p>
+          <h1 className="text-2xl font-bold text-[#111111]">Role Intelligence Detail</h1>
+        </div>
+      </div>
+
+      <RetroColorBars height="h-1.5" />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="grid lg:grid-cols-[220px_1fr] gap-6">
+
+          {/* Sidebar — JD selector */}
+          <aside>
+            <JDSelector
+              analyses={jdAnalyses}
+              selectedId={selectedId}
+              onSelect={(id) => {
+                setSelectedId(id);
+                setActiveTab('overview');
+              }}
+            />
+          </aside>
+
+          {/* Main content */}
+          <div className="min-w-0 space-y-4">
+            {/* Header card */}
+            <JDDetailHeader analysis={analysis} />
+
+            {/* Tabs */}
+            <div className="bg-white border border-[#DDD8CE] rounded-sm overflow-hidden">
+              <JDDetailTabs
+                activeTab={activeTab}
+                onChange={setActiveTab as (t: Tab) => void}
+              />
+
+              <div className="p-5">
+                {/* Overview tab */}
+                {activeTab === 'overview' && (
+                  <div
+                    id="tab-panel-overview"
+                    role="tabpanel"
+                    aria-labelledby="tab-overview"
+                    className="space-y-5"
+                  >
+                    <div className="bg-[#FBFAF6] border border-[#DDD8CE] rounded-sm p-4">
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-2">
+                        Fit summary
+                      </p>
+                      <p className="text-sm text-[#111111] leading-relaxed">{analysis.fitSummary}</p>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div>
+                        <p className="font-mono text-[10px] uppercase tracking-widest text-[#1A7A41] mb-2">
+                          Strongest alignment
+                        </p>
+                        <ul className="space-y-1.5">
+                          {analysis.strongestAlignment.map((s, i) => (
+                            <li key={i} className="flex gap-2 text-xs text-[#111111]">
+                              <span className="text-[#1A7A41] flex-shrink-0 font-mono">+</span>
+                              {s}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="font-mono text-[10px] uppercase tracking-widest text-[#D42E3A] mb-2">
+                          Weakest alignment
+                        </p>
+                        <ul className="space-y-1.5">
+                          {analysis.weakestAlignment.map((s, i) => (
+                            <li key={i} className="flex gap-2 text-xs text-[#111111]">
+                              <span className="text-[#D42E3A] flex-shrink-0 font-mono">−</span>
+                              {s}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-[#DDD8CE] pt-4">
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-2">
+                        Recommended candidate narrative
+                      </p>
+                      <p className="text-sm text-[#6B6862] leading-relaxed">{analysis.candidateNarrative}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Evidence tab */}
+                {activeTab === 'evidence' && (
+                  <div
+                    id="tab-panel-evidence"
+                    role="tabpanel"
+                    aria-labelledby="tab-evidence"
+                    className="space-y-4"
+                  >
+                    <p className="font-mono text-[10px] text-[#9A958F]">
+                      Retrieved evidence · {analysis.evidenceSnippets.length} chunks indexed
+                    </p>
+                    {analysis.evidenceSnippets.map((snippet) => (
+                      <div key={snippet.id} className="border border-[#DDD8CE] rounded-sm p-4">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <Badge variant="muted">{snippet.id}</Badge>
+                          <span
+                            className={[
+                              'font-mono text-[10px] px-2 py-0.5 rounded-sm border',
+                              snippet.sourceType === 'cv'
+                                ? 'bg-[#EEFBF3] text-[#1A7A41] border-[#B3EACC]'
+                                : 'bg-[#EEF4FF] text-[#1D4FAA] border-[#BFCFF8]',
+                            ].join(' ')}
+                          >
+                            {snippet.sourceType.toUpperCase()}
+                          </span>
+                          <span className="font-mono text-[10px] text-[#6B6862]">{snippet.source}</span>
+                        </div>
+                        <blockquote className="border-l-2 border-[#DDD8CE] pl-3 mb-2">
+                          <p className="text-xs text-[#111111] italic leading-relaxed">"{snippet.text}"</p>
+                        </blockquote>
+                        <p className="text-xs text-[#6B6862] leading-relaxed">
+                          <span className="font-mono text-[10px] text-[#9A958F] uppercase tracking-widest mr-1">
+                            Why it matters:
+                          </span>
+                          {snippet.relevance}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Gaps tab */}
+                {activeTab === 'gaps' && (
+                  <div
+                    id="tab-panel-gaps"
+                    role="tabpanel"
+                    aria-labelledby="tab-gaps"
+                    className="space-y-4"
+                  >
+                    {analysis.skillGaps.map((gap, i) => (
+                      <div key={i} className="border border-[#DDD8CE] rounded-sm p-4">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <span className="text-sm font-semibold text-[#111111]">{gap.skill}</span>
+                          <Badge variant={gap.impact === 'High' ? 'error' : gap.impact === 'Medium' ? 'warning' : 'muted'}>
+                            {gap.impact} impact
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-[#9A958F] font-mono mb-2">
+                          Current level: {gap.currentLevel}
+                        </p>
+                        <div>
+                          <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-1">
+                            Suggested action
+                          </p>
+                          <p className="text-xs text-[#6B6862] leading-relaxed">{gap.suggestedAction}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Interview tab */}
+                {activeTab === 'interview' && (
+                  <div
+                    id="tab-panel-interview"
+                    role="tabpanel"
+                    aria-labelledby="tab-interview"
+                    className="space-y-4"
+                  >
+                    {analysis.interviewQuestions.map((q, i) => (
+                      <div key={i} className="border border-[#DDD8CE] rounded-sm p-4">
+                        <div className="flex items-start gap-3 mb-3">
+                          <span className="font-mono text-[10px] text-[#9A958F] flex-shrink-0 mt-0.5">
+                            Q{String(i + 1).padStart(2, '0')}
+                          </span>
+                          <p className="text-sm font-semibold text-[#111111]">{q.question}</p>
+                        </div>
+                        <div className="space-y-3 pl-7">
+                          <div>
+                            <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-1">
+                              Answer angle
+                            </p>
+                            <p className="text-xs text-[#6B6862] leading-relaxed">{q.answerAngle}</p>
+                          </div>
+                          <div>
+                            <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-1">
+                              Evidence to mention
+                            </p>
+                            <Badge variant="muted">{q.evidenceToMention}</Badge>
+                          </div>
+                          <div>
+                            <p className="font-mono text-[10px] uppercase tracking-widest text-[#D42E3A] mb-1">
+                              Risk to avoid
+                            </p>
+                            <p className="text-xs text-[#6B6862] leading-relaxed">{q.riskToAvoid}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Rewrite tab */}
+                {activeTab === 'rewrite' && (
+                  <div
+                    id="tab-panel-rewrite"
+                    role="tabpanel"
+                    aria-labelledby="tab-rewrite"
+                    className="space-y-5"
+                  >
+                    <div className="bg-[#FBFAF6] border border-[#DDD8CE] rounded-sm p-4">
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-2">
+                        Rewritten professional summary
+                      </p>
+                      <p className="text-sm text-[#111111] leading-relaxed">
+                        {analysis.rewriteRecommendation.professionalSummary}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-2">
+                        Bullet improvements
+                      </p>
+                      <ul className="space-y-2">
+                        {analysis.rewriteRecommendation.bulletImprovements.map((b, i) => (
+                          <li key={i} className="text-xs text-[#6B6862] leading-relaxed border-l-2 border-[#DDD8CE] pl-3">
+                            {b}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-2">
+                        Keyword suggestions
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {analysis.rewriteRecommendation.keywordSuggestions.map((k) => (
+                          <span
+                            key={k}
+                            className="font-mono text-[10px] bg-[#F4F1EA] border border-[#DDD8CE] text-[#111111] px-2 py-0.5 rounded-sm"
+                          >
+                            {k}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="bg-[#FEF0EF] border border-[#F8C2BE] rounded-sm p-4">
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-[#D42E3A] mb-2">
+                        Do not claim
+                      </p>
+                      <ul className="space-y-1.5">
+                        {analysis.rewriteRecommendation.doNotClaim.map((w, i) => (
+                          <li key={i} className="text-xs text-[#6B6862] leading-relaxed flex gap-2">
+                            <span className="text-[#D42E3A] flex-shrink-0">—</span>
+                            {w}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <p className="font-mono text-[10px] text-[#9A958F] border-t border-[#DDD8CE] pt-3">
+                      These recommendations should only strengthen evidence already present in the CV. They should not invent experience.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
