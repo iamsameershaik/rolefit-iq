@@ -10,11 +10,6 @@ import type { RetrievedChunk } from "../_shared/types.ts";
 
 const log = createLogger("analyse-session");
 
-// For MVP, analysis uses the full raw_text of each document rather than chunk
-// retrieval. At typical CV/JD lengths (2–20k tokens), this fits comfortably in
-// gpt-4o's 128k context window and gives the model full document awareness.
-// Phase 3+: switch to chunk retrieval for larger documents or multi-doc analysis.
-
 Deno.serve(async (req: Request) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -39,8 +34,8 @@ Deno.serve(async (req: Request) => {
       return err("CONFIGURATION_ERROR", "OPENAI_API_KEY is not configured", 500);
     }
 
-    const supabase      = createServiceClient();
-    const started       = Date.now();
+    const supabase       = createServiceClient();
+    const started        = Date.now();
     const embeddingModel = Deno.env.get("OPENAI_EMBEDDING_MODEL") ?? EMBEDDING.MODEL;
     const chatModel      = Deno.env.get("OPENAI_CHAT_MODEL") ?? LLM.ANALYSIS_MODEL;
     const provider       = new OpenAIProvider(apiKey, embeddingModel, chatModel);
@@ -53,11 +48,12 @@ Deno.serve(async (req: Request) => {
       .is("deleted_at", null)
       .maybeSingle();
 
-    if (sessionError) return err("DB_ERROR", "Error fetching session", 500, sessionError.message);
+    if (sessionError) return err("DB_ERROR", "Error fetching session: " + sessionError.message, 500);
     if (!session)     return err("NOT_FOUND", "Session not found or deleted", 404);
 
     if (session.status === "created" || session.status === "uploading") {
-      return err("PRECONDITION_FAILED", "Session documents are not yet fully indexed", 400);
+      return err("PRECONDITION_FAILED",
+        `Session is not ready for analysis (status: ${session.status}). Upload and index documents first.`, 400);
     }
 
     // ── Fetch documents with raw_text ───────────────────────────
@@ -68,21 +64,32 @@ Deno.serve(async (req: Request) => {
       .eq("status", "indexed")
       .is("deleted_at", null);
 
-    if (docsError) return err("DB_ERROR", "Error fetching documents", 500, docsError.message);
+    if (docsError) return err("DB_ERROR", "Error fetching documents: " + docsError.message, 500);
 
-    const cvDocs  = (documents ?? []).filter((d: { document_type: string }) => d.document_type === "resume");
-    const jdDocs  = (documents ?? []).filter((d: { document_type: string }) => d.document_type === "job_description");
+    const cvDocs = (documents ?? []).filter(
+      (d: { document_type: string }) => d.document_type === "resume"
+    );
+    const jdDocs = (documents ?? []).filter(
+      (d: { document_type: string }) => d.document_type === "job_description"
+    );
 
     if (cvDocs.length === 0) {
-      return err("PRECONDITION_FAILED", "No indexed CV found in this session", 400);
+      return err("PRECONDITION_FAILED",
+        "No indexed CV found in this session. Upload a CV first.", 400);
     }
     if (jdDocs.length === 0) {
-      return err("PRECONDITION_FAILED", "No indexed job descriptions found in this session", 400);
+      return err("PRECONDITION_FAILED",
+        "No indexed job descriptions found in this session. Upload at least one JD.", 400);
     }
 
     const cvDoc = cvDocs[0] as { id: string; raw_text: string; title: string | null };
 
-    // ── Clear any existing analyses (allow re-run) ──────────────
+    log.info("Analysis starting", {
+      session_id,
+      metadata: { jd_count: jdDocs.length, cv_chars: (cvDoc.raw_text ?? "").length },
+    });
+
+    // ── Clear existing analyses (re-run support) ────────────────
     await supabase.from("analyses").delete().eq("session_id", session_id);
 
     // ── Update session status ───────────────────────────────────
@@ -93,83 +100,98 @@ Deno.serve(async (req: Request) => {
 
     await supabase.from("ai_events").insert({
       session_id,
-      event_type: AI_EVENT_TYPE.ANALYSIS_REQUESTED,
+      event_type: AI_EVENT_TYPE.ANALYSIS_STARTED,
       stage: "analysis",
       status: "pending",
-      metadata: { jd_count: jdDocs.length, cv_doc_id: cvDoc.id },
+      metadata: {
+        jd_count:   jdDocs.length,
+        cv_doc_id:  cvDoc.id,
+        cv_chars:   (cvDoc.raw_text ?? "").length,
+        session_status_before: session.status,
+      },
     });
-
-    log.info("Analysis started", { session_id, metadata: { jd_count: jdDocs.length } });
 
     const analyses: unknown[] = [];
 
     // ── Analyse each JD ─────────────────────────────────────────
-    for (const jdDoc of jdDocs as Array<{ id: string; job_index: number; title: string | null; raw_text: string }>) {
+    for (const jdDoc of jdDocs as Array<{
+      id: string; job_index: number; title: string | null; raw_text: string;
+    }>) {
       const jobStarted = Date.now();
       const jobTitle   = jdDoc.title ?? `Job Description ${jdDoc.job_index}`;
 
       await supabase.from("ai_events").insert({
         session_id,
-        event_type: AI_EVENT_TYPE.ANALYSIS_REQUESTED,
+        event_type: AI_EVENT_TYPE.ANALYSIS_JOB_STARTED,
         stage: "analysis",
         status: "pending",
-        metadata: { document_id: jdDoc.id, job_index: jdDoc.job_index },
+        metadata: {
+          document_id: jdDoc.id,
+          job_index:   jdDoc.job_index,
+          job_title:   jobTitle,
+          jd_chars:    (jdDoc.raw_text ?? "").length,
+        },
       });
 
       let output;
       try {
-        // Pass full text as virtual chunks — works within gpt-4o's 128k context.
         const candidateChunks: RetrievedChunk[] = [{
-          id: cvDoc.id,
+          id:            cvDoc.id,
           session_id,
-          document_id: cvDoc.id,
+          document_id:   cvDoc.id,
           document_type: "resume",
-          job_index: null,
+          job_index:     null,
           section_label: null,
-          chunk_index: 0,
-          content: cvDoc.raw_text ?? "",
-          similarity: 1.0,
+          chunk_index:   0,
+          content:       cvDoc.raw_text ?? "",
+          similarity:    1.0,
         }];
 
         const jdChunks: RetrievedChunk[] = [{
-          id: jdDoc.id,
+          id:            jdDoc.id,
           session_id,
-          document_id: jdDoc.id,
+          document_id:   jdDoc.id,
           document_type: "job_description",
-          job_index: jdDoc.job_index,
+          job_index:     jdDoc.job_index,
           section_label: null,
-          chunk_index: 0,
-          content: jdDoc.raw_text ?? "",
-          similarity: 1.0,
+          chunk_index:   0,
+          content:       jdDoc.raw_text ?? "",
+          similarity:    1.0,
         }];
 
         output = await provider.generateStructuredAnalysis({
           session_id,
           candidate_chunks: candidateChunks,
-          jd_chunks: jdChunks,
-          job_index: jdDoc.job_index,
-          job_title: jobTitle,
+          jd_chunks:        jdChunks,
+          job_index:        jdDoc.job_index,
+          job_title:        jobTitle,
         });
       } catch (analysisErr) {
         const msg = (analysisErr as Error).message;
-        log.error("Analysis failed for JD", { session_id, metadata: { document_id: jdDoc.id, error: msg } });
-
-        await supabase.from("ai_events").insert({
+        log.error("Analysis failed for JD", {
           session_id,
-          event_type: AI_EVENT_TYPE.ANALYSIS_FAILED,
-          stage: "analysis",
-          status: "failed",
-          latency_ms: Date.now() - jobStarted,
           metadata: { document_id: jdDoc.id, job_index: jdDoc.job_index, error: msg },
         });
 
-        // Mark session failed and return immediately
+        await supabase.from("ai_events").insert({
+          session_id,
+          event_type:   AI_EVENT_TYPE.ANALYSIS_FAILED,
+          stage:        "analysis",
+          status:       "failed",
+          latency_ms:   Date.now() - jobStarted,
+          metadata:     { document_id: jdDoc.id, job_index: jdDoc.job_index, error: msg },
+        });
+
         await supabase
           .from("sessions")
           .update({ status: SESSION_STATUS.FAILED, updated_at: new Date().toISOString() })
           .eq("id", session_id);
 
-        return err("ANALYSIS_ERROR", `Analysis failed for job ${jdDoc.job_index}: ${msg}`, 500);
+        return err(
+          "ANALYSIS_ERROR",
+          `AI analysis failed for "${jobTitle}" (job ${jdDoc.job_index}): ${msg}`,
+          500,
+        );
       }
 
       // ── Store analysis ────────────────────────────────────────
@@ -177,51 +199,78 @@ Deno.serve(async (req: Request) => {
         .from("analyses")
         .insert({
           session_id,
-          job_document_id:      jdDoc.id,
-          job_index:            jdDoc.job_index,
-          fit_tier:             output.fit_tier,
-          fit_estimate:         output.fit_estimate,
-          evidence_strength:    output.evidence_strength,
-          risk_level:           output.risk_level,
-          preparation_priority: output.preparation_priority,
-          summary:              output.summary,
-          strengths:            output.strengths,
-          skill_gaps:           output.skill_gaps,
-          experience_alignment: output.experience_alignment,
-          risk_flags:           output.risk_flags,
-          interview_questions:  output.interview_questions,
-          talking_points:       output.talking_points,
+          job_document_id:         jdDoc.id,
+          job_index:               jdDoc.job_index,
+          fit_tier:                output.fit_tier,
+          fit_estimate:            output.fit_estimate,
+          evidence_strength:       output.evidence_strength,
+          risk_level:              output.risk_level,
+          preparation_priority:    output.preparation_priority,
+          summary:                 output.summary,
+          strengths:               output.strengths,
+          skill_gaps:              output.skill_gaps,
+          experience_alignment:    output.experience_alignment,
+          risk_flags:              output.risk_flags,
+          interview_questions:     output.interview_questions,
+          talking_points:          output.talking_points,
           rewrite_recommendations: output.rewrite_recommendations,
-          evidence:             output.evidence,
+          evidence:                output.evidence,
         })
         .select("*")
         .single();
 
       if (insertError) {
-        log.error("Failed to store analysis", { session_id, metadata: { error: insertError.message } });
-        return err("DB_ERROR", "Failed to store analysis", 500, insertError.message);
+        log.error("Failed to store analysis", {
+          session_id,
+          metadata: {
+            document_id:   jdDoc.id,
+            job_index:     jdDoc.job_index,
+            error:         insertError.message,
+            error_details: insertError.details,
+            error_code:    insertError.code,
+          },
+        });
+
+        await supabase
+          .from("sessions")
+          .update({ status: SESSION_STATUS.FAILED, updated_at: new Date().toISOString() })
+          .eq("id", session_id);
+
+        return err(
+          "DB_ERROR",
+          `Failed to store analysis for job ${jdDoc.job_index}: ${insertError.message}`,
+          500,
+          insertError.details,
+        );
       }
 
       analyses.push(savedAnalysis);
 
+      const evidenceCount = Array.isArray(output.evidence) ? output.evidence.length : 0;
       await supabase.from("ai_events").insert({
         session_id,
-        event_type: AI_EVENT_TYPE.ANALYSIS_COMPLETED,
-        stage: "analysis",
-        status: "success",
+        event_type: AI_EVENT_TYPE.ANALYSIS_JOB_COMPLETED,
+        stage:      "analysis",
+        status:     "success",
         latency_ms: Date.now() - jobStarted,
         metadata: {
-          document_id:   jdDoc.id,
-          job_index:     jdDoc.job_index,
-          fit_tier:      output.fit_tier,
-          fit_estimate:  output.fit_estimate,
-          chunk_count:   (output.evidence as unknown[]).length,
+          document_id:    jdDoc.id,
+          job_index:      jdDoc.job_index,
+          fit_tier:       output.fit_tier,
+          fit_estimate:   output.fit_estimate,
+          evidence_count: evidenceCount,
+          used_fallback:  (output as Record<string, unknown>).used_fallback ?? false,
         },
       });
 
       log.info("JD analysed", {
         session_id,
-        metadata: { job_index: jdDoc.job_index, fit_tier: output.fit_tier, fit_estimate: output.fit_estimate },
+        metadata: {
+          job_index:    jdDoc.job_index,
+          fit_tier:     output.fit_tier,
+          fit_estimate: output.fit_estimate,
+          latency_ms:   Date.now() - jobStarted,
+        },
       });
     }
 
@@ -234,10 +283,10 @@ Deno.serve(async (req: Request) => {
     await supabase.from("ai_events").insert({
       session_id,
       event_type: AI_EVENT_TYPE.ANALYSIS_COMPLETED,
-      stage: "analysis",
-      status: "success",
+      stage:      "analysis",
+      status:     "success",
       latency_ms: Date.now() - started,
-      metadata: { analyses_count: analyses.length },
+      metadata:   { analyses_count: analyses.length, jd_count: jdDocs.length },
     });
 
     log.info("Session analysis complete", {

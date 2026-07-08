@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 import RetroColorBars from '../components/brand/RetroColorBars';
 import JDSelector from '../components/detail/JDSelector';
 import JDDetailHeader from '../components/detail/JDDetailHeader';
@@ -19,24 +19,38 @@ interface Props {
 }
 
 export default function JDDetailView({ onNavigate, initialJdId, sessionId }: Props) {
+  const isRealMode = !!sessionId;
+
   const [realAnalyses, setRealAnalyses] = useState<JDAnalysis[] | null>(null);
   const [loading, setLoading]           = useState(false);
+  const [loadError, setLoadError]       = useState<string | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
     setLoading(true);
+    setLoadError(null);
     getSession(sessionId)
       .then((result) => {
         if (result.success && result.data.analyses.length > 0) {
           setRealAnalyses(mapAnalysesArray(result.data.analyses));
+        } else if (result.success) {
+          setRealAnalyses([]);
+        } else {
+          setLoadError(result.error.message);
         }
       })
-      .catch(() => { /* silently fall back to mock */ })
+      .catch((e) => setLoadError(String(e)))
       .finally(() => setLoading(false));
   }, [sessionId]);
 
-  const displayAnalyses = realAnalyses ?? jdAnalyses;
-  const fallbackId      = displayAnalyses[0]?.id ?? 'jd-1';
+  // Real mode: only show real analyses — no mock fallback.
+  // Demo mode: always show mock data.
+  const displayAnalyses = isRealMode
+    ? (realAnalyses ?? [])
+    : jdAnalyses;
+
+  const hasAnalyses  = displayAnalyses.length > 0;
+  const fallbackId   = displayAnalyses[0]?.id ?? 'jd-1';
   const [selectedId, setSelectedId] = useState(initialJdId ?? fallbackId);
   const [activeTab, setActiveTab]   = useState<Tab>('overview');
 
@@ -62,14 +76,14 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId }: Pro
             results dashboard
           </button>
           <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862] mb-1">
-            {sessionId ? (
+            {isRealMode ? (
               <span>
                 RFQ-JD-DETAIL ·{' '}
-                <span className="text-[#1A7A41]">{sessionId.slice(0, 8)}</span>
-                {realAnalyses ? ' · live data' : loading ? ' · loading…' : ''}
+                <span className="text-[#1A7A41]">{sessionId!.slice(0, 8)}</span>
+                {realAnalyses && realAnalyses.length > 0 ? ' · live data' : loading ? ' · loading…' : ' · real session'}
               </span>
             ) : (
-              'RFQ-JD-DETAIL · mock data'
+              'RFQ-JD-DETAIL · demo data'
             )}
           </p>
           <h1 className="text-2xl font-bold text-[#111111]">Role Intelligence Detail</h1>
@@ -82,13 +96,47 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId }: Pro
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
           <div className="bg-white border border-[#DDD8CE] rounded-sm px-4 py-2 flex items-center gap-3">
             <Loader2 className="w-3.5 h-3.5 text-[#6B6862] animate-spin flex-shrink-0" aria-hidden="true" />
-            <p className="font-mono text-[10px] text-[#6B6862] uppercase tracking-widest">
-              Loading analysis results…
+            <p className="font-mono text-[10px] text-[#6B6862] uppercase tracking-widest">Loading analysis…</p>
+          </div>
+        </div>
+      )}
+
+      {loadError && !loading && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm px-4 py-2">
+            <p className="font-mono text-[10px] text-[#92600A] uppercase tracking-widest">
+              Could not load session: {loadError}
             </p>
           </div>
         </div>
       )}
 
+      {/* Real mode with no analyses: clear empty state, not mock data */}
+      {isRealMode && !loading && !loadError && !hasAnalyses && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+          <div className="bg-white border border-[#DDD8CE] rounded-sm p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-1.5">
+                Real session · {sessionId!.slice(0, 8)}
+              </p>
+              <p className="text-sm font-semibold text-[#111111] mb-1">No role detail available yet</p>
+              <p className="text-xs text-[#6B6862] leading-relaxed">
+                Run the analysis from the workspace first to see per-role breakdowns here.
+              </p>
+            </div>
+            <button
+              onClick={() => onNavigate('upload')}
+              className="flex items-center gap-1.5 bg-[#111111] text-[#F4F1EA] font-mono text-[11px] uppercase tracking-widest px-4 py-2.5 rounded-sm hover:bg-[#222222] transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#F4F1EA] flex-shrink-0"
+            >
+              Run analysis
+              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main content — only when analyses exist */}
+      {hasAnalyses && (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid lg:grid-cols-[220px_1fr] gap-6">
 
@@ -343,6 +391,7 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId }: Pro
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

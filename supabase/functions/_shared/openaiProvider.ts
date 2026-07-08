@@ -105,10 +105,46 @@ export class OpenAIProvider implements AIProvider {
     const latency = Date.now() - started;
     log.info("Analysis generated", { metadata: { model: this.chatModel, latency_ms: latency } });
 
-    const parsed = this.parseJSON(raw, "generateStructuredAnalysis");
+    // Try to parse; on failure retry once with a JSON repair prompt.
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = this.parseJSON(raw, "generateStructuredAnalysis");
+    } catch (firstErr) {
+      log.info("JSON parse failed on first attempt, retrying with repair prompt", {
+        metadata: { error: (firstErr as Error).message },
+      });
+      try {
+        const repairRaw = await this.callChat({
+          model: this.chatModel,
+          temperature: 0,
+          max_tokens: LLM.MAX_ANALYSIS_TOKENS,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: system },
+            { role: "user",   content: user },
+            { role: "assistant", content: raw },
+            {
+              role: "user",
+              content:
+                "Your previous response was not valid JSON. Return ONLY the JSON object — no markdown fences, no extra text.",
+            },
+          ],
+        });
+        parsed = this.parseJSON(repairRaw, "generateStructuredAnalysis (repair)");
+      } catch (repairErr) {
+        // Both attempts failed — build a conservative fallback from available evidence.
+        log.info("JSON repair also failed, using conservative fallback", {
+          metadata: { error: (repairErr as Error).message },
+        });
+        parsed = this.buildConservativeFallback(
+          candidateContext,
+          jdContext,
+          jobTitle,
+          (firstErr as Error).message,
+        );
+      }
+    }
 
-    // Retry once with a repair prompt if the first parse fails
-    // (in practice JSON mode rarely fails, but this guards edge cases)
     return this.normaliseAnalysisOutput(parsed);
   }
 
@@ -216,6 +252,50 @@ export class OpenAIProvider implements AIProvider {
     } catch {
       throw new Error(`${context}: JSON parse failed. Raw length=${raw.length}`);
     }
+  }
+
+  private buildConservativeFallback(
+    candidateContext: string,
+    jdContext: string,
+    jobTitle: string,
+    parseError: string,
+  ): Record<string, unknown> {
+    // Produce a minimal but honest analysis when OpenAI returns unparseable output.
+    // Does NOT invent skills or experience — only what can be inferred from presence
+    // of text. Marks evidence_strength as Weak and includes a warning.
+    const hasCV = candidateContext.length > 50;
+    const hasJD = jdContext.length > 50;
+    return {
+      fit_tier:             "Moderate",
+      fit_estimate:         40,
+      evidence_strength:    "Weak",
+      risk_level:           "Medium",
+      preparation_priority: "Medium",
+      summary:
+        `Analysis could not be fully generated for ${jobTitle} due to a parsing error. ` +
+        `The CV and JD were received (CV: ${candidateContext.length} chars, JD: ${jdContext.length} chars). ` +
+        `Review the documents and re-run analysis for a full assessment.`,
+      strengths: hasCV
+        ? [{ title: "CV provided", explanation: "Candidate submitted a CV for review.", evidence_strength: "Weak", evidence: [] }]
+        : [],
+      skill_gaps: hasJD
+        ? [{ title: "Full analysis unavailable", impact: "Medium", suggested_action: "Re-run analysis.", severity: "Medium", evidence: [] }]
+        : [],
+      experience_alignment: [],
+      risk_flags: [
+        {
+          title:      "Analysis parse failure",
+          risk_level: "Medium",
+          explanation: `The AI output could not be parsed: ${parseError.slice(0, 120)}`,
+          mitigation: "Re-run analysis. If the error persists, shorten the documents.",
+        },
+      ],
+      interview_questions:     [],
+      talking_points:          [],
+      rewrite_recommendations: { professional_summary: "", bullet_improvements: [], keyword_suggestions: [], do_not_claim: [] },
+      evidence:                [],
+      used_fallback:           true,
+    };
   }
 
   private normaliseAnalysisOutput(raw: Record<string, unknown>): AnalysisOutput {

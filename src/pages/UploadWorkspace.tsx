@@ -45,7 +45,9 @@ export default function UploadWorkspace({
   const indexedCount  = allSlots.filter((s) => s.status === 'indexed').length;
   const hasCV         = workspace.cv.status !== 'empty';
   const hasAnyJD      = workspace.jds.some((j) => j.status !== 'empty');
-  const canAnalyse    = hasCV && hasAnyJD;
+  // Real session: docs already live in the backend — allow analysis even if local
+  // workspace slots were cleared by back-navigation.
+  const canAnalyse    = activeSessionId ? true : (hasCV && hasAnyJD);
 
   function handleSlotChange(id: string, updates: Partial<DocumentSlot>) {
     setWorkspace((prev) => {
@@ -115,7 +117,7 @@ export default function UploadWorkspace({
     if (!canAnalyse) return;
 
     if (!activeSessionId) {
-      // No real session — use mock flow
+      // No real session — use mock demo flow
       onNavigate('results');
       return;
     }
@@ -124,15 +126,15 @@ export default function UploadWorkspace({
     setApiError(null);
     try {
       const result = await analyseSession(activeSessionId);
-      if (!result.success) {
-        // Show error but still navigate — dashboard will show mock fallback
-        setApiError(`Analysis error: ${result.error.message}`);
+      if (result.success) {
+        onNavigate('results');
+      } else {
+        setApiError(`Analysis failed: ${result.error.message}`);
       }
-    } catch {
-      setApiError('Analysis unavailable — dashboard will show demo data.');
+    } catch (e) {
+      setApiError(`Analysis unavailable: ${e instanceof Error ? e.message : 'Network error'}`);
     } finally {
       setIsAnalysing(false);
-      onNavigate('results');
     }
   }
 
@@ -264,6 +266,8 @@ export default function UploadWorkspace({
             <p className="text-sm text-[#F4F1EA]">
               {isAnalysing
                 ? 'Running AI analysis across all job descriptions…'
+                : activeSessionId && indexedCount === 0
+                ? 'Session connected — click to run analysis on indexed documents.'
                 : canAnalyse
                 ? `${indexedCount} document${indexedCount !== 1 ? 's' : ''} indexed · ${totalChunks} evidence chunks ready.`
                 : 'Upload a CV and at least one job description to begin.'}
