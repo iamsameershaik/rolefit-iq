@@ -8,17 +8,15 @@ import type { Page, WorkspaceState } from './types';
 import { sampleWorkspace } from './data/mockData';
 
 export default function App() {
-  const [page, setPage] = useState<Page>('landing');
+  const [page, setPage]           = useState<Page>('landing');
   const [loadSample, setLoadSample] = useState(false);
   const [selectedJdId, setSelectedJdId] = useState<string | undefined>(undefined);
-  // Real Supabase session ID — set by UploadWorkspace when backend call succeeds
+  // Real Supabase session ID — set by UploadWorkspace when backend connects
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   function navigate(target: Page, jdId?: string) {
     if (jdId) setSelectedJdId(jdId);
-    if (target === 'landing') {
-      setLoadSample(false);
-    }
+    if (target === 'landing') setLoadSample(false);
     setPage(target);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -37,6 +35,8 @@ export default function App() {
           key={loadSample ? 'sample' : 'empty'}
           onNavigate={(p) => navigate(p)}
           initialWorkspace={uploadWorkspaceInitial}
+          onSessionReady={(id) => setSessionId(id)}
+          sessionId={sessionId}
         />
       )}
       {page === 'results' && (
@@ -49,6 +49,7 @@ export default function App() {
         <JDDetailView
           onNavigate={(p, jdId) => navigate(p, jdId)}
           initialJdId={selectedJdId}
+          sessionId={sessionId}
         />
       )}
     </AppShell>

@@ -4,24 +4,11 @@ import { ok, err, internalError } from "../_shared/response.ts";
 import { createServiceClient } from "../_shared/supabaseClient.ts";
 import { createLogger } from "../_shared/logger.ts";
 import { validateSessionId, requiredString } from "../_shared/validation.ts";
-import { AI_EVENT_TYPE } from "../_shared/constants.ts";
+import { AI_EVENT_TYPE, RETRIEVAL, EMBEDDING, LLM } from "../_shared/constants.ts";
+import { OpenAIProvider } from "../_shared/openaiProvider.ts";
+import { retrieveRelevantChunks } from "../_shared/retrieval.ts";
 
 const log = createLogger("chat");
-
-// Phase 1 placeholder — grounded retrieval not yet connected.
-// Phase 2 implementation plan:
-//   1. Persist the user message to chat_messages table
-//   2. Create embedding for the user question via AIProvider.createEmbedding()
-//   3. Retrieve relevant chunks via retrieveChunks() (calls match_chunks RPC)
-//   4. Call AIProvider.generateGroundedAnswer({ question, retrieved_chunks, history })
-//   5. Persist assistant message with citations + retrieved_chunk_ids
-//   6. Log ai_event with token_usage, retrieval latency, total latency
-//   7. Return assistant message with citations
-//
-// Guardrails enforced at prompt level (see prompts.ts):
-//   - Only answer from retrieved evidence
-//   - Never invent experience or claim hiring outcomes
-//   - Explicitly flag when evidence is insufficient
 
 Deno.serve(async (req: Request) => {
   const corsResponse = handleCors(req);
@@ -43,9 +30,22 @@ Deno.serve(async (req: Request) => {
       return err("VALIDATION_ERROR", (validationErr as Error).message, 400);
     }
 
-    const supabase = createServiceClient();
+    // Optional: scope retrieval to a specific JD
+    const selected_job_index: number | null =
+      typeof body.selected_job_index === "number" ? body.selected_job_index : null;
 
-    // Verify session exists
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!apiKey) {
+      return err("CONFIGURATION_ERROR", "OPENAI_API_KEY is not configured", 500);
+    }
+
+    const supabase       = createServiceClient();
+    const started        = Date.now();
+    const embeddingModel = Deno.env.get("OPENAI_EMBEDDING_MODEL") ?? EMBEDDING.MODEL;
+    const chatModel      = Deno.env.get("OPENAI_CHAT_MODEL") ?? LLM.CHAT_MODEL;
+    const provider       = new OpenAIProvider(apiKey, embeddingModel, chatModel);
+
+    // ── Verify session ──────────────────────────────────────────
     const { data: session, error: sessionError } = await supabase
       .from("sessions")
       .select("id, status, deleted_at")
@@ -53,45 +53,175 @@ Deno.serve(async (req: Request) => {
       .is("deleted_at", null)
       .maybeSingle();
 
-    if (sessionError) {
-      return err("DB_ERROR", "Error fetching session", 500, sessionError.message);
-    }
-    if (!session) {
-      return err("NOT_FOUND", "Session not found or deleted", 404);
+    if (sessionError) return err("DB_ERROR", "Error fetching session", 500, sessionError.message);
+    if (!session)     return err("NOT_FOUND", "Session not found or deleted", 404);
+
+    // ── Persist user message ────────────────────────────────────
+    const { data: userMsg, error: userMsgError } = await supabase
+      .from("chat_messages")
+      .insert({
+        session_id,
+        role:    "user",
+        content: content,
+      })
+      .select("id, created_at")
+      .single();
+
+    if (userMsgError) {
+      log.warn("Failed to persist user message", { session_id, metadata: { error: userMsgError.message } });
     }
 
-    // Log the chat request — content length only, not full text
     await supabase.from("ai_events").insert({
       session_id,
       event_type: AI_EVENT_TYPE.CHAT_REQUESTED,
       stage: "chat",
       status: "pending",
+      metadata: { content_length: content.length, session_status: session.status },
+    });
+
+    // ── Fetch recent conversation history for context ───────────
+    const { data: history } = await supabase
+      .from("chat_messages")
+      .select("role, content")
+      .eq("session_id", session_id)
+      .order("created_at", { ascending: false })
+      .limit(8);
+
+    const conversationHistory = (history ?? [])
+      .reverse()
+      .filter((m: { role: string }) => m.role === "user" || m.role === "assistant")
+      .slice(0, 6) as Array<{ role: string; content: string }>;
+
+    // ── Retrieve relevant chunks ────────────────────────────────
+    const retrievalStart = Date.now();
+    let retrievalResult;
+    try {
+      retrievalResult = await retrieveRelevantChunks(supabase, provider, {
+        session_id,
+        query:                content,
+        match_count:          RETRIEVAL.DEFAULT_MATCH_COUNT,
+        filter_document_type: null,
+        filter_job_index:     selected_job_index,
+      });
+    } catch (retrievalErr) {
+      const msg = (retrievalErr as Error).message;
+      log.error("Retrieval failed", { session_id, metadata: { error: msg } });
+      return err("RETRIEVAL_ERROR", "Failed to retrieve evidence chunks", 500, msg);
+    }
+
+    const retrievalLatency = Date.now() - retrievalStart;
+
+    await supabase.from("ai_events").insert({
+      session_id,
+      event_type: AI_EVENT_TYPE.RETRIEVAL_EXECUTED,
+      stage: "chat",
+      status: "success",
+      latency_ms: retrievalLatency,
       metadata: {
-        content_length: content.length,
-        session_status: session.status,
-        // content intentionally excluded from logs
+        chunks_retrieved:     retrievalResult.chunks.length,
+        embedding_model:      embeddingModel,
+        embedding_latency_ms: retrievalResult.embedding_latency_ms,
       },
     });
 
-    log.info("Chat message received", {
+    log.info("Chunks retrieved", {
       session_id,
-      metadata: { content_length: content.length },
+      metadata: { chunks: retrievalResult.chunks.length, latency_ms: retrievalLatency },
     });
 
-    // Phase 1 placeholder response
-    return ok({
-      role: "assistant",
-      content:
-        "Grounded assistant retrieval is not connected yet. Chat will be added in the next phase.",
-      citations: [],
-      retrieved_chunk_ids: [],
+    // ── Generate grounded answer ────────────────────────────────
+    const answerStart = Date.now();
+    let answerOutput;
+    try {
+      answerOutput = await provider.generateGroundedAnswer({
+        session_id,
+        question:             content,
+        retrieved_chunks:     retrievalResult.chunks,
+        conversation_history: conversationHistory,
+      });
+    } catch (answerErr) {
+      const msg = (answerErr as Error).message;
+      log.error("Answer generation failed", { session_id, metadata: { error: msg } });
+
+      await supabase.from("ai_events").insert({
+        session_id,
+        event_type: AI_EVENT_TYPE.CHAT_COMPLETED,
+        stage: "chat",
+        status: "failed",
+        latency_ms: Date.now() - answerStart,
+        metadata: { error: msg },
+      });
+
+      return err("GENERATION_ERROR", "Failed to generate answer", 500, msg);
+    }
+
+    const answerLatency = Date.now() - answerStart;
+
+    // ── Persist assistant message ───────────────────────────────
+    const citationsForDb = answerOutput.citations.map((c) => ({
+      source:        c.source,
+      source_type:   c.source_type,
+      excerpt:       c.excerpt,
+      relevance:     c.relevance,
+    }));
+
+    const chunkIds = retrievalResult.chunks.map((c) => c.id);
+
+    const { data: assistantMsg, error: assistantMsgError } = await supabase
+      .from("chat_messages")
+      .insert({
+        session_id,
+        role:                 "assistant",
+        content:              answerOutput.answer,
+        citations:            citationsForDb,
+        retrieved_chunk_ids:  chunkIds,
+        metadata: {
+          model:           chatModel,
+          retrieval_count: retrievalResult.chunks.length,
+        },
+      })
+      .select("id, created_at")
+      .single();
+
+    if (assistantMsgError) {
+      log.warn("Failed to persist assistant message", { session_id, metadata: { error: assistantMsgError.message } });
+    }
+
+    const totalLatency = Date.now() - started;
+
+    await supabase.from("ai_events").insert({
       session_id,
-      phase: 1,
-      next_steps: [
-        "Phase 2: Embed question + retrieve chunks via match_chunks()",
-        "Phase 2: Generate grounded answer via OpenAI with citation mapping",
-        "Phase 2: Persist conversation to chat_messages table",
-      ],
+      event_type: AI_EVENT_TYPE.CHAT_COMPLETED,
+      stage: "chat",
+      status: "success",
+      latency_ms: totalLatency,
+      metadata: {
+        content_length:      content.length,
+        answer_length:       answerOutput.answer.length,
+        chunks_retrieved:    retrievalResult.chunks.length,
+        citations_count:     answerOutput.citations.length,
+        model:               chatModel,
+        answer_latency_ms:   answerLatency,
+      },
+    });
+
+    log.info("Chat completed", {
+      session_id,
+      metadata: {
+        chunks_retrieved: retrievalResult.chunks.length,
+        citations_count:  answerOutput.citations.length,
+        latency_ms:       totalLatency,
+      },
+    });
+
+    return ok({
+      answer:               answerOutput.answer,
+      citations:            citationsForDb,
+      retrieved_chunk_ids:  chunkIds,
+      retrieved_chunks:     retrievalResult.chunks,
+      message_id:           assistantMsg?.id ?? null,
+      user_message_id:      userMsg?.id ?? null,
+      model:                chatModel,
     });
   } catch (e) {
     log.error("Unexpected error in chat", { metadata: { error: String(e) } });

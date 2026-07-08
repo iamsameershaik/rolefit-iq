@@ -1,29 +1,56 @@
-import { useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import RetroColorBars from '../components/brand/RetroColorBars';
 import JDSelector from '../components/detail/JDSelector';
 import JDDetailHeader from '../components/detail/JDDetailHeader';
 import JDDetailTabs from '../components/detail/JDDetailTabs';
 import Badge from '../components/shared/Badge';
-import type { Page } from '../types';
+import type { Page, JDAnalysis } from '../types';
 import { jdAnalyses } from '../data/mockData';
+import { getSession } from '../lib/apiClient';
+import { mapAnalysesArray } from '../lib/analysisMapper';
 
 type Tab = 'overview' | 'evidence' | 'gaps' | 'interview' | 'rewrite';
 
 interface Props {
   onNavigate: (page: Page, jdId?: string) => void;
   initialJdId?: string;
+  sessionId?: string | null;
 }
 
-export default function JDDetailView({ onNavigate, initialJdId }: Props) {
-  const [selectedId, setSelectedId] = useState(initialJdId ?? jdAnalyses[0].id);
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
+export default function JDDetailView({ onNavigate, initialJdId, sessionId }: Props) {
+  const [realAnalyses, setRealAnalyses] = useState<JDAnalysis[] | null>(null);
+  const [loading, setLoading]           = useState(false);
 
-  const analysis = jdAnalyses.find((j) => j.id === selectedId) ?? jdAnalyses[0];
+  useEffect(() => {
+    if (!sessionId) return;
+    setLoading(true);
+    getSession(sessionId)
+      .then((result) => {
+        if (result.success && result.data.analyses.length > 0) {
+          setRealAnalyses(mapAnalysesArray(result.data.analyses));
+        }
+      })
+      .catch(() => { /* silently fall back to mock */ })
+      .finally(() => setLoading(false));
+  }, [sessionId]);
+
+  const displayAnalyses = realAnalyses ?? jdAnalyses;
+  const fallbackId      = displayAnalyses[0]?.id ?? 'jd-1';
+  const [selectedId, setSelectedId] = useState(initialJdId ?? fallbackId);
+  const [activeTab, setActiveTab]   = useState<Tab>('overview');
+
+  // When real analyses load, ensure selectedId stays valid
+  useEffect(() => {
+    if (realAnalyses && !realAnalyses.find((j) => j.id === selectedId)) {
+      setSelectedId(realAnalyses[0]?.id ?? 'jd-1');
+    }
+  }, [realAnalyses, selectedId]);
+
+  const analysis = displayAnalyses.find((j) => j.id === selectedId) ?? displayAnalyses[0];
 
   return (
     <div className="bg-[#F4F1EA] min-h-screen">
-      {/* Header */}
       <div className="border-b border-[#DDD8CE] bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
           <button
@@ -35,7 +62,15 @@ export default function JDDetailView({ onNavigate, initialJdId }: Props) {
             results dashboard
           </button>
           <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862] mb-1">
-            RFQ-JD-DETAIL
+            {sessionId ? (
+              <span>
+                RFQ-JD-DETAIL ·{' '}
+                <span className="text-[#1A7A41]">{sessionId.slice(0, 8)}</span>
+                {realAnalyses ? ' · live data' : loading ? ' · loading…' : ''}
+              </span>
+            ) : (
+              'RFQ-JD-DETAIL · mock data'
+            )}
           </p>
           <h1 className="text-2xl font-bold text-[#111111]">Role Intelligence Detail</h1>
         </div>
@@ -43,13 +78,23 @@ export default function JDDetailView({ onNavigate, initialJdId }: Props) {
 
       <RetroColorBars height="h-1.5" />
 
+      {loading && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="bg-white border border-[#DDD8CE] rounded-sm px-4 py-2 flex items-center gap-3">
+            <Loader2 className="w-3.5 h-3.5 text-[#6B6862] animate-spin flex-shrink-0" aria-hidden="true" />
+            <p className="font-mono text-[10px] text-[#6B6862] uppercase tracking-widest">
+              Loading analysis results…
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid lg:grid-cols-[220px_1fr] gap-6">
 
-          {/* Sidebar — JD selector */}
           <aside>
             <JDSelector
-              analyses={jdAnalyses}
+              analyses={displayAnalyses}
               selectedId={selectedId}
               onSelect={(id) => {
                 setSelectedId(id);
@@ -58,12 +103,9 @@ export default function JDDetailView({ onNavigate, initialJdId }: Props) {
             />
           </aside>
 
-          {/* Main content */}
           <div className="min-w-0 space-y-4">
-            {/* Header card */}
             <JDDetailHeader analysis={analysis} />
 
-            {/* Tabs */}
             <div className="bg-white border border-[#DDD8CE] rounded-sm overflow-hidden">
               <JDDetailTabs
                 activeTab={activeTab}
@@ -71,7 +113,6 @@ export default function JDDetailView({ onNavigate, initialJdId }: Props) {
               />
 
               <div className="p-5">
-                {/* Overview tab */}
                 {activeTab === 'overview' && (
                   <div
                     id="tab-panel-overview"
@@ -124,7 +165,6 @@ export default function JDDetailView({ onNavigate, initialJdId }: Props) {
                   </div>
                 )}
 
-                {/* Evidence tab */}
                 {activeTab === 'evidence' && (
                   <div
                     id="tab-panel-evidence"
@@ -165,7 +205,6 @@ export default function JDDetailView({ onNavigate, initialJdId }: Props) {
                   </div>
                 )}
 
-                {/* Gaps tab */}
                 {activeTab === 'gaps' && (
                   <div
                     id="tab-panel-gaps"
@@ -195,7 +234,6 @@ export default function JDDetailView({ onNavigate, initialJdId }: Props) {
                   </div>
                 )}
 
-                {/* Interview tab */}
                 {activeTab === 'interview' && (
                   <div
                     id="tab-panel-interview"
@@ -236,7 +274,6 @@ export default function JDDetailView({ onNavigate, initialJdId }: Props) {
                   </div>
                 )}
 
-                {/* Rewrite tab */}
                 {activeTab === 'rewrite' && (
                   <div
                     id="tab-panel-rewrite"

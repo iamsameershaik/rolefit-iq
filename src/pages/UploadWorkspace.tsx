@@ -6,11 +6,15 @@ import ProcessingPipeline from '../components/upload/ProcessingPipeline';
 import RetroColorBars from '../components/brand/RetroColorBars';
 import type { DocumentSlot, Page, WorkspaceState } from '../types';
 import { emptyWorkspace, sampleWorkspace } from '../data/mockData';
-import { createSession, uploadDocument } from '../lib/apiClient';
+import { createSession, uploadDocument, analyseSession } from '../lib/apiClient';
 
 interface UploadWorkspaceProps {
   onNavigate: (page: Page) => void;
   initialWorkspace?: WorkspaceState;
+  /** Called once the real Supabase session is established. */
+  onSessionReady?: (sessionId: string) => void;
+  /** Existing session ID from App (persisted across navigations). */
+  sessionId?: string | null;
 }
 
 function cloneWorkspace(ws: WorkspaceState): WorkspaceState {
@@ -20,20 +24,28 @@ function cloneWorkspace(ws: WorkspaceState): WorkspaceState {
   };
 }
 
-export default function UploadWorkspace({ onNavigate, initialWorkspace }: UploadWorkspaceProps) {
+export default function UploadWorkspace({
+  onNavigate,
+  initialWorkspace,
+  onSessionReady,
+  sessionId: externalSessionId,
+}: UploadWorkspaceProps) {
   const [workspace, setWorkspace] = useState<WorkspaceState>(
     initialWorkspace ? cloneWorkspace(initialWorkspace) : cloneWorkspace(emptyWorkspace)
   );
-  const [sessionId, setSessionId]       = useState<string | null>(null);
-  const [apiError, setApiError]         = useState<string | null>(null);
-  // Track which slot is currently being indexed against the real backend
+  // Use external sessionId if provided (restored from App state on back-navigation)
+  const [localSessionId, setLocalSessionId] = useState<string | null>(externalSessionId ?? null);
+  const [apiError, setApiError]             = useState<string | null>(null);
   const [indexingSlotId, setIndexingSlotId] = useState<string | null>(null);
+  const [isAnalysing, setIsAnalysing]       = useState(false);
+
+  const activeSessionId = localSessionId ?? externalSessionId ?? null;
 
   const allSlots: DocumentSlot[] = [workspace.cv, ...workspace.jds];
-  const indexedCount = allSlots.filter((s) => s.status === 'indexed').length;
-  const hasCV        = workspace.cv.status !== 'empty';
-  const hasAnyJD     = workspace.jds.some((j) => j.status !== 'empty');
-  const canAnalyse   = hasCV && hasAnyJD;
+  const indexedCount  = allSlots.filter((s) => s.status === 'indexed').length;
+  const hasCV         = workspace.cv.status !== 'empty';
+  const hasAnyJD      = workspace.jds.some((j) => j.status !== 'empty');
+  const canAnalyse    = hasCV && hasAnyJD;
 
   function handleSlotChange(id: string, updates: Partial<DocumentSlot>) {
     setWorkspace((prev) => {
@@ -50,40 +62,33 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
 
   function loadSample() {
     setWorkspace(cloneWorkspace(sampleWorkspace));
-    setSessionId(null);
     setApiError(null);
     setIndexingSlotId(null);
   }
 
-  /**
-   * Attempt a real backend upload + indexing pipeline.
-   * The mock state is already set by UploadCard before this is called.
-   * On success: update the slot with real chunk count from the backend.
-   * On failure: show a non-blocking notice, mock state remains intact.
-   */
   async function handleRealUpload(slot: DocumentSlot, rawText: string) {
     setApiError(null);
     setIndexingSlotId(slot.id);
-
     try {
-      // Create session if this is the first upload
-      let activeSessionId = sessionId;
-      if (!activeSessionId) {
-        const sessionResult = await createSession({ source: 'web' });
-        if (!sessionResult.success) {
-          setApiError(`Backend unavailable — using mock mode. (${sessionResult.error.message})`);
-          setIndexingSlotId(null);
+      let sid = activeSessionId;
+      if (!sid) {
+        const sr = await createSession({ source: 'web' });
+        if (!sr.success) {
+          setApiError(`Backend unavailable — using mock mode. (${sr.error.message})`);
           return;
         }
-        activeSessionId = sessionResult.data.session.id;
-        setSessionId(activeSessionId);
+        sid = sr.data.session.id;
+        setLocalSessionId(sid);
+        onSessionReady?.(sid);
       }
 
-      const docType   = slot.type === 'cv' ? 'resume' : 'job_description';
-      const jobIndex  = slot.type === 'jd' ? (parseInt(slot.id.replace(/\D/g, '').slice(-1)) || 1) : null;
+      const docType  = slot.type === 'cv' ? 'resume' : 'job_description';
+      const jobIndex = slot.type === 'jd'
+        ? (parseInt(slot.id.replace(/\D/g, '').slice(-1)) || 1)
+        : null;
 
-      const docResult = await uploadDocument({
-        session_id:    activeSessionId,
+      const dr = await uploadDocument({
+        session_id:    sid,
         document_type: docType,
         raw_text:      rawText,
         title:         slot.title,
@@ -91,14 +96,13 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
         job_index:     jobIndex,
       });
 
-      if (docResult.success) {
-        // Update slot with real chunk count from the backend response
+      if (dr.success) {
         handleSlotChange(slot.id, {
-          chunkCount: docResult.data.chunks_created,
-          charCount:  docResult.data.document.text_char_count ?? rawText.length,
+          chunkCount: dr.data.chunks_created,
+          charCount:  dr.data.document.text_char_count ?? rawText.length,
         });
       } else {
-        setApiError(`Indexing failed — document stored in mock only. (${docResult.error.message})`);
+        setApiError(`Indexing note: ${dr.error.message}`);
       }
     } catch {
       setApiError('Backend unavailable — using mock mode.');
@@ -107,17 +111,40 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
     }
   }
 
-  const totalChunks = allSlots.reduce((sum, s) => sum + (s.chunkCount ?? 0), 0);
+  async function handleAnalyse() {
+    if (!canAnalyse) return;
 
-  const activeStage =
-    indexedCount === 0   ? null
-    : indexedCount < 4   ? 'extract'
-    : canAnalyse         ? 'analyse'
+    if (!activeSessionId) {
+      // No real session — use mock flow
+      onNavigate('results');
+      return;
+    }
+
+    setIsAnalysing(true);
+    setApiError(null);
+    try {
+      const result = await analyseSession(activeSessionId);
+      if (!result.success) {
+        // Show error but still navigate — dashboard will show mock fallback
+        setApiError(`Analysis error: ${result.error.message}`);
+      }
+    } catch {
+      setApiError('Analysis unavailable — dashboard will show demo data.');
+    } finally {
+      setIsAnalysing(false);
+      onNavigate('results');
+    }
+  }
+
+  const totalChunks  = allSlots.reduce((sum, s) => sum + (s.chunkCount ?? 0), 0);
+  const activeStage  =
+    indexedCount === 0 ? null
+    : indexedCount < 4 ? 'extract'
+    : canAnalyse       ? 'analyse'
     : 'chunk';
 
   return (
     <div className="bg-[#F4F1EA] min-h-screen">
-      {/* Page header */}
       <div className="border-b border-[#DDD8CE] bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <button
@@ -132,11 +159,8 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862] mb-1">
-                {sessionId ? (
-                  <span>
-                    workspace ·{' '}
-                    <span className="text-[#1A7A41]">{sessionId.slice(0, 8)}</span>
-                  </span>
+                {activeSessionId ? (
+                  <span>workspace · <span className="text-[#1A7A41]">{activeSessionId.slice(0, 8)}</span></span>
                 ) : (
                   'workspace-01 · mock mode'
                 )}
@@ -164,13 +188,10 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
 
       <RetroColorBars height="h-1.5" />
 
-      {/* API error notice — non-blocking */}
       {apiError && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
           <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm px-4 py-2 flex items-center justify-between gap-4">
-            <p className="font-mono text-[10px] text-[#92600A] uppercase tracking-widest">
-              {apiError}
-            </p>
+            <p className="font-mono text-[10px] text-[#92600A] uppercase tracking-widest">{apiError}</p>
             <button
               onClick={() => setApiError(null)}
               className="font-mono text-[10px] text-[#9A958F] hover:text-[#111111] uppercase tracking-widest focus-visible:outline-none"
@@ -189,15 +210,13 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
             {[
               { label: 'Documents',       value: `${indexedCount} / 4` },
               { label: 'Evidence chunks', value: totalChunks > 0 ? String(totalChunks) : '—' },
-              { label: 'CV',              value: workspace.cv.status === 'indexed' ? 'indexed' : 'pending' },
-              { label: 'JDs',             value: `${workspace.jds.filter((j) => j.status !== 'empty').length} of 3` },
-              { label: 'Backend',         value: sessionId ? 'connected' : 'mock' },
+              { label: 'CV',  value: workspace.cv.status === 'indexed' ? 'indexed' : 'pending' },
+              { label: 'JDs', value: `${workspace.jds.filter((j) => j.status !== 'empty').length} of 3` },
+              { label: 'Backend', value: activeSessionId ? 'connected' : 'mock' },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2 flex-shrink-0">
-                <span className="font-mono text-[10px] text-[#9A958F] uppercase tracking-widest">
-                  {item.label}
-                </span>
-                <span className={`font-mono text-xs ${item.label === 'Backend' && sessionId ? 'text-[#1A7A41]' : 'text-[#111111]'}`}>
+                <span className="font-mono text-[10px] text-[#9A958F] uppercase tracking-widest">{item.label}</span>
+                <span className={`font-mono text-xs ${item.label === 'Backend' && activeSessionId ? 'text-[#1A7A41]' : 'text-[#111111]'}`}>
                   {item.value}
                 </span>
               </div>
@@ -205,9 +224,7 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
             {indexingSlotId && (
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <Loader2 className="w-3 h-3 text-[#6B6862] animate-spin" aria-hidden="true" />
-                <span className="font-mono text-[10px] text-[#6B6862] uppercase tracking-widest">
-                  embedding…
-                </span>
+                <span className="font-mono text-[10px] text-[#6B6862] uppercase tracking-widest">embedding…</span>
               </div>
             )}
           </div>
@@ -217,35 +234,23 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
       {/* Upload grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
-          <UploadCard
-            slot={workspace.cv}
-            onStatusChange={handleSlotChange}
-            onRealUpload={handleRealUpload}
-          />
+          <UploadCard slot={workspace.cv} onStatusChange={handleSlotChange} onRealUpload={handleRealUpload} />
           {workspace.jds.map((jd) => (
-            <UploadCard
-              key={jd.id}
-              slot={jd}
-              onStatusChange={handleSlotChange}
-              onRealUpload={handleRealUpload}
-            />
+            <UploadCard key={jd.id} slot={jd} onStatusChange={handleSlotChange} onRealUpload={handleRealUpload} />
           ))}
         </div>
 
-        {/* Privacy note */}
         <div className="mt-6 bg-white border border-[#DDD8CE] rounded-sm p-4 flex gap-3">
           <Info className="w-4 h-4 text-[#9A958F] flex-shrink-0 mt-0.5" aria-hidden="true" />
           <div className="space-y-1">
             <p className="text-xs text-[#6B6862] leading-relaxed">
               <span className="font-semibold text-[#111111]">Privacy: </span>
-              Documents are used only for this analysis workspace. Production deployments enforce
-              retention, deletion, and access controls. Use the delete session action to invoke the
-              right-to-delete pathway.
+              Documents are used only for this analysis workspace. Use the delete session action
+              to invoke the right-to-delete pathway.
             </p>
             <p className="text-xs text-[#6B6862] leading-relaxed">
               <span className="font-semibold text-[#111111]">Accessibility: </span>
-              Interface designed with keyboard-friendly controls, labelled fields, and high-contrast
-              states.
+              Interface designed with keyboard-friendly controls, labelled fields, and high-contrast states.
             </p>
           </div>
         </div>
@@ -257,7 +262,9 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
               Ready to analyse?
             </p>
             <p className="text-sm text-[#F4F1EA]">
-              {canAnalyse
+              {isAnalysing
+                ? 'Running AI analysis across all job descriptions…'
+                : canAnalyse
                 ? `${indexedCount} document${indexedCount !== 1 ? 's' : ''} indexed · ${totalChunks} evidence chunks ready.`
                 : 'Upload a CV and at least one job description to begin.'}
             </p>
@@ -265,27 +272,27 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
           <Button
             variant="ghost"
             size="md"
-            disabled={!canAnalyse}
-            onClick={() => canAnalyse && onNavigate('results')}
+            disabled={!canAnalyse || isAnalysing}
+            onClick={handleAnalyse}
             className="border-[#333] text-[#F4F1EA] hover:border-[#F4F1EA] hover:text-[#F4F1EA] hover:bg-transparent disabled:opacity-30 whitespace-nowrap"
           >
-            Analyse role fit
-            <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            {isAnalysing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                Analysing…
+              </>
+            ) : (
+              <>
+                Analyse role fit
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              </>
+            )}
           </Button>
         </div>
 
-        {/* Compliance notes */}
         <div className="mt-4 flex flex-wrap gap-3">
-          {[
-            'GDPR-ready architecture',
-            'Evidence-grounded recommendations',
-            'No hiring guarantees',
-            'WCAG-aware interface',
-          ].map((note) => (
-            <span
-              key={note}
-              className="font-mono text-[10px] text-[#9A958F] uppercase tracking-widest border border-[#DDD8CE] px-2 py-1 rounded-sm bg-white"
-            >
+          {['GDPR-ready architecture', 'Evidence-grounded recommendations', 'No hiring guarantees', 'WCAG-aware interface'].map((note) => (
+            <span key={note} className="font-mono text-[10px] text-[#9A958F] uppercase tracking-widest border border-[#DDD8CE] px-2 py-1 rounded-sm bg-white">
               {note}
             </span>
           ))}
