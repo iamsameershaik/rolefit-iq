@@ -8,6 +8,8 @@ import PasteTextPanel from './PasteTextPanel';
 interface UploadCardProps {
   slot: DocumentSlot;
   onStatusChange: (id: string, updates: Partial<DocumentSlot>) => void;
+  /** Optional real upload handler — called after mock state is updated. */
+  onRealUpload?: (slot: DocumentSlot, rawText: string) => void;
 }
 
 function statusBadgeVariant(status: DocumentStatus) {
@@ -43,7 +45,7 @@ function getMockFileName(type: 'cv' | 'jd', id: string): string {
   return names[idx % names.length] || names[0];
 }
 
-export default function UploadCard({ slot, onStatusChange }: UploadCardProps) {
+export default function UploadCard({ slot, onStatusChange, onRealUpload }: UploadCardProps) {
   const [dragOver, setDragOver] = useState(false);
   const [pasteText, setPasteText] = useState(slot.pasteText || '');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -55,26 +57,35 @@ export default function UploadCard({ slot, onStatusChange }: UploadCardProps) {
     const fileName = getMockFileName(slot.type, slot.id);
     const charCount = slot.type === 'cv' ? 8420 : Math.floor(Math.random() * 2000) + 3000;
     const chunkCount = slot.type === 'cv' ? 18 : Math.floor(Math.random() * 5) + 8;
-    onStatusChange(slot.id, {
+    const updates: Partial<DocumentSlot> = {
       status: 'indexed',
       fileName,
       charCount,
       chunkCount,
       pasteOpen: false,
-    });
+    };
+    onStatusChange(slot.id, updates);
+    // Attempt real backend upload with placeholder text (file parsing is Phase 2)
+    onRealUpload?.(
+      { ...slot, ...updates },
+      `[Mock upload — file parsing in Phase 2] Filename: ${fileName}`
+    );
   }
 
   function handlePasteConfirm() {
     const charCount = pasteText.length;
     const chunkCount = Math.max(4, Math.floor(charCount / 400));
-    onStatusChange(slot.id, {
+    const updates: Partial<DocumentSlot> = {
       status: 'indexed',
       fileName: undefined,
       charCount,
       chunkCount,
       pasteText,
       pasteOpen: false,
-    });
+    };
+    onStatusChange(slot.id, updates);
+    // Attempt real backend upload with the actual pasted text
+    onRealUpload?.({ ...slot, ...updates }, pasteText);
   }
 
   function handleRemove() {

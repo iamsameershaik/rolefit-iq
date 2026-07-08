@@ -11,10 +11,14 @@ export default function App() {
   const [page, setPage] = useState<Page>('landing');
   const [loadSample, setLoadSample] = useState(false);
   const [selectedJdId, setSelectedJdId] = useState<string | undefined>(undefined);
+  // Real Supabase session ID — set by UploadWorkspace when backend call succeeds
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   function navigate(target: Page, jdId?: string) {
     if (jdId) setSelectedJdId(jdId);
-    if (target !== 'upload') setLoadSample((prev) => (target === 'landing' ? false : prev));
+    if (target === 'landing') {
+      setLoadSample(false);
+    }
     setPage(target);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -36,7 +40,10 @@ export default function App() {
         />
       )}
       {page === 'results' && (
-        <ResultsDashboard onNavigate={(p, jdId) => navigate(p, jdId)} />
+        <ResultsDashboard
+          onNavigate={(p, jdId) => navigate(p, jdId)}
+          sessionId={sessionId}
+        />
       )}
       {page === 'jd-detail' && (
         <JDDetailView

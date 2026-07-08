@@ -6,6 +6,7 @@ import ProcessingPipeline from '../components/upload/ProcessingPipeline';
 import RetroColorBars from '../components/brand/RetroColorBars';
 import type { DocumentSlot, Page, WorkspaceState } from '../types';
 import { emptyWorkspace, sampleWorkspace } from '../data/mockData';
+import { createSession, uploadDocument } from '../lib/apiClient';
 
 interface UploadWorkspaceProps {
   onNavigate: (page: Page) => void;
@@ -23,6 +24,9 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
   const [workspace, setWorkspace] = useState<WorkspaceState>(
     initialWorkspace ? cloneWorkspace(initialWorkspace) : cloneWorkspace(emptyWorkspace)
   );
+  // Real session ID from Edge Function — null when using mock flow
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const allSlots: DocumentSlot[] = [workspace.cv, ...workspace.jds];
   const indexedCount = allSlots.filter((s) => s.status === 'indexed').length;
@@ -45,6 +49,49 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
 
   function loadSample() {
     setWorkspace(cloneWorkspace(sampleWorkspace));
+    setSessionId(null);
+    setApiError(null);
+  }
+
+  /**
+   * Attempt to create a real backend session and upload a document.
+   * Falls back gracefully to mock mode if the API call fails.
+   */
+  async function handleRealUpload(slot: DocumentSlot, rawText: string) {
+    setApiError(null);
+    try {
+      // Get or create a session for this workspace
+      let activeSessionId = sessionId;
+      if (!activeSessionId) {
+        const sessionResult = await createSession({ source: 'web' });
+        if (!sessionResult.success) {
+          // API failed — stay in mock mode, show a non-blocking notice
+          setApiError(`Backend session unavailable — using mock mode. (${sessionResult.error.message})`);
+          return;
+        }
+        activeSessionId = sessionResult.data.session.id;
+        setSessionId(activeSessionId);
+      }
+
+      // Upload the document
+      const docType = slot.type === 'cv' ? 'resume' : 'job_description';
+      const docResult = await uploadDocument({
+        session_id: activeSessionId,
+        document_type: docType,
+        raw_text: rawText,
+        title: slot.title,
+        file_name: slot.fileName,
+        job_index: slot.type === 'jd' ? (parseInt(slot.id.slice(-2)) || 1) : null,
+      });
+
+      if (!docResult.success) {
+        setApiError(`Upload recorded in mock only. (${docResult.error.message})`);
+        // Continue — mock state already updated by UploadCard
+      }
+      // Success — mock state drives the UI; real data is persisted in Supabase
+    } catch {
+      setApiError('Backend unavailable — using mock mode.');
+    }
   }
 
   const totalChunks = allSlots.reduce((sum, s) => sum + (s.chunkCount ?? 0), 0);
@@ -75,7 +122,14 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862] mb-1">
-                workspace-01
+                {sessionId ? (
+                  <span>
+                    workspace ·{' '}
+                    <span className="text-[#1A7A41]">{sessionId.slice(0, 8)}</span>
+                  </span>
+                ) : (
+                  'workspace-01 · mock mode'
+                )}
               </p>
               <h1 className="text-2xl font-bold text-[#111111] mb-1">
                 Create your role intelligence workspace
@@ -101,6 +155,24 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
 
       <RetroColorBars height="h-1.5" />
 
+      {/* API error notice — non-blocking, mock mode continues */}
+      {apiError && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm px-4 py-2 flex items-center justify-between gap-4">
+            <p className="font-mono text-[10px] text-[#92600A] uppercase tracking-widest">
+              {apiError}
+            </p>
+            <button
+              onClick={() => setApiError(null)}
+              className="font-mono text-[10px] text-[#9A958F] hover:text-[#111111] uppercase tracking-widest focus-visible:outline-none"
+              aria-label="Dismiss notice"
+            >
+              dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Stats bar */}
       <div className="bg-white border-b border-[#DDD8CE]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -113,12 +185,18 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
                 label: 'JDs',
                 value: `${workspace.jds.filter((j) => j.status !== 'empty').length} of 3`,
               },
+              {
+                label: 'Backend',
+                value: sessionId ? 'connected' : 'mock',
+              },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2 flex-shrink-0">
                 <span className="font-mono text-[10px] text-[#9A958F] uppercase tracking-widest">
                   {item.label}
                 </span>
-                <span className="font-mono text-xs text-[#111111]">{item.value}</span>
+                <span className={`font-mono text-xs ${item.label === 'Backend' && sessionId ? 'text-[#1A7A41]' : 'text-[#111111]'}`}>
+                  {item.value}
+                </span>
               </div>
             ))}
           </div>
@@ -128,9 +206,18 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
       {/* Upload grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
-          <UploadCard slot={workspace.cv} onStatusChange={handleSlotChange} />
+          <UploadCard
+            slot={workspace.cv}
+            onStatusChange={handleSlotChange}
+            onRealUpload={handleRealUpload}
+          />
           {workspace.jds.map((jd) => (
-            <UploadCard key={jd.id} slot={jd} onStatusChange={handleSlotChange} />
+            <UploadCard
+              key={jd.id}
+              slot={jd}
+              onStatusChange={handleSlotChange}
+              onRealUpload={handleRealUpload}
+            />
           ))}
         </div>
 
@@ -140,8 +227,9 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
           <div className="space-y-1">
             <p className="text-xs text-[#6B6862] leading-relaxed">
               <span className="font-semibold text-[#111111]">Privacy: </span>
-              Documents are used only for this analysis workspace. Production deployments should
-              enforce retention, deletion, and access controls.
+              Documents are used only for this analysis workspace. Production deployments enforce
+              retention, deletion, and access controls. Use the delete session action to invoke the
+              right-to-delete pathway.
             </p>
             <p className="text-xs text-[#6B6862] leading-relaxed">
               <span className="font-semibold text-[#111111]">Accessibility: </span>

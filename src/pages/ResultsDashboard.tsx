@@ -19,6 +19,7 @@ import type { Page, Strength, SkillGap, RiskFlag, InterviewQuestion } from '../t
 
 interface Props {
   onNavigate: (page: Page, jdId?: string) => void;
+  sessionId?: string | null;
 }
 
 // Consolidate data across all three JDs
@@ -57,7 +58,12 @@ const consolidatedInterview: InterviewQuestion[] = jdAnalyses.flatMap((jd) =>
   jd.interviewQuestions.slice(0, 1)
 );
 
-export default function ResultsDashboard({ onNavigate }: Props) {
+export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
+  // If a real sessionId exists, getSession could be called here in Phase 2 to
+  // hydrate the dashboard with live analysis data from Supabase.
+  // For now, mock data is always used as the display layer.
+  // Phase 2: useEffect(() => { getSession(sessionId).then(...) }, [sessionId])
+  const isRealSession = Boolean(sessionId);
   return (
     <div className="bg-[#F4F1EA] min-h-screen">
       {/* Page header */}
@@ -72,7 +78,14 @@ export default function ResultsDashboard({ onNavigate }: Props) {
             workspace
           </button>
           <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862] mb-1">
-            RFQ-RESULTS-01
+            {isRealSession ? (
+              <span>
+                RFQ-RESULTS-01 ·{' '}
+                <span className="text-[#1A7A41]">{sessionId!.slice(0, 8)}</span>
+              </span>
+            ) : (
+              'RFQ-RESULTS-01 · mock data'
+            )}
           </p>
           <h1 className="text-2xl font-bold text-[#111111] mb-1">Results Dashboard</h1>
           <p className="text-sm text-[#6B6862] max-w-2xl">
