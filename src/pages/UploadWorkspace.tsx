@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight, Info } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Info, Loader2 } from 'lucide-react';
 import Button from '../components/shared/Button';
 import UploadCard from '../components/upload/UploadCard';
 import ProcessingPipeline from '../components/upload/ProcessingPipeline';
@@ -24,15 +24,16 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
   const [workspace, setWorkspace] = useState<WorkspaceState>(
     initialWorkspace ? cloneWorkspace(initialWorkspace) : cloneWorkspace(emptyWorkspace)
   );
-  // Real session ID from Edge Function — null when using mock flow
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [sessionId, setSessionId]       = useState<string | null>(null);
+  const [apiError, setApiError]         = useState<string | null>(null);
+  // Track which slot is currently being indexed against the real backend
+  const [indexingSlotId, setIndexingSlotId] = useState<string | null>(null);
 
   const allSlots: DocumentSlot[] = [workspace.cv, ...workspace.jds];
   const indexedCount = allSlots.filter((s) => s.status === 'indexed').length;
-  const hasCV = workspace.cv.status !== 'empty';
-  const hasAnyJD = workspace.jds.some((j) => j.status !== 'empty');
-  const canAnalyse = hasCV && hasAnyJD;
+  const hasCV        = workspace.cv.status !== 'empty';
+  const hasAnyJD     = workspace.jds.some((j) => j.status !== 'empty');
+  const canAnalyse   = hasCV && hasAnyJD;
 
   function handleSlotChange(id: string, updates: Partial<DocumentSlot>) {
     setWorkspace((prev) => {
@@ -51,59 +52,68 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
     setWorkspace(cloneWorkspace(sampleWorkspace));
     setSessionId(null);
     setApiError(null);
+    setIndexingSlotId(null);
   }
 
   /**
-   * Attempt to create a real backend session and upload a document.
-   * Falls back gracefully to mock mode if the API call fails.
+   * Attempt a real backend upload + indexing pipeline.
+   * The mock state is already set by UploadCard before this is called.
+   * On success: update the slot with real chunk count from the backend.
+   * On failure: show a non-blocking notice, mock state remains intact.
    */
   async function handleRealUpload(slot: DocumentSlot, rawText: string) {
     setApiError(null);
+    setIndexingSlotId(slot.id);
+
     try {
-      // Get or create a session for this workspace
+      // Create session if this is the first upload
       let activeSessionId = sessionId;
       if (!activeSessionId) {
         const sessionResult = await createSession({ source: 'web' });
         if (!sessionResult.success) {
-          // API failed — stay in mock mode, show a non-blocking notice
-          setApiError(`Backend session unavailable — using mock mode. (${sessionResult.error.message})`);
+          setApiError(`Backend unavailable — using mock mode. (${sessionResult.error.message})`);
+          setIndexingSlotId(null);
           return;
         }
         activeSessionId = sessionResult.data.session.id;
         setSessionId(activeSessionId);
       }
 
-      // Upload the document
-      const docType = slot.type === 'cv' ? 'resume' : 'job_description';
+      const docType   = slot.type === 'cv' ? 'resume' : 'job_description';
+      const jobIndex  = slot.type === 'jd' ? (parseInt(slot.id.replace(/\D/g, '').slice(-1)) || 1) : null;
+
       const docResult = await uploadDocument({
-        session_id: activeSessionId,
+        session_id:    activeSessionId,
         document_type: docType,
-        raw_text: rawText,
-        title: slot.title,
-        file_name: slot.fileName,
-        job_index: slot.type === 'jd' ? (parseInt(slot.id.slice(-2)) || 1) : null,
+        raw_text:      rawText,
+        title:         slot.title,
+        file_name:     slot.fileName,
+        job_index:     jobIndex,
       });
 
-      if (!docResult.success) {
-        setApiError(`Upload recorded in mock only. (${docResult.error.message})`);
-        // Continue — mock state already updated by UploadCard
+      if (docResult.success) {
+        // Update slot with real chunk count from the backend response
+        handleSlotChange(slot.id, {
+          chunkCount: docResult.data.chunks_created,
+          charCount:  docResult.data.document.text_char_count ?? rawText.length,
+        });
+      } else {
+        setApiError(`Indexing failed — document stored in mock only. (${docResult.error.message})`);
       }
-      // Success — mock state drives the UI; real data is persisted in Supabase
     } catch {
       setApiError('Backend unavailable — using mock mode.');
+    } finally {
+      setIndexingSlotId(null);
     }
   }
 
   const totalChunks = allSlots.reduce((sum, s) => sum + (s.chunkCount ?? 0), 0);
 
   const activeStage =
-    indexedCount === 0
-      ? null
-      : indexedCount < 4
-      ? 'extract'
-      : canAnalyse
-      ? 'analyse'
-      : 'chunk';
+    indexedCount === 0   ? null
+    : indexedCount < 4   ? 'extract'
+    : canAnalyse         ? 'analyse'
+    : 'chunk';
 
   return (
     <div className="bg-[#F4F1EA] min-h-screen">
@@ -146,7 +156,6 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
             </div>
           </div>
 
-          {/* Pipeline */}
           <div className="mt-5">
             <ProcessingPipeline activeStage={activeStage ?? undefined} />
           </div>
@@ -155,7 +164,7 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
 
       <RetroColorBars height="h-1.5" />
 
-      {/* API error notice — non-blocking, mock mode continues */}
+      {/* API error notice — non-blocking */}
       {apiError && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
           <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm px-4 py-2 flex items-center justify-between gap-4">
@@ -178,17 +187,11 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-6 py-3 overflow-x-auto">
             {[
-              { label: 'Documents', value: `${indexedCount} / 4` },
+              { label: 'Documents',       value: `${indexedCount} / 4` },
               { label: 'Evidence chunks', value: totalChunks > 0 ? String(totalChunks) : '—' },
-              { label: 'CV', value: workspace.cv.status === 'indexed' ? 'indexed' : 'pending' },
-              {
-                label: 'JDs',
-                value: `${workspace.jds.filter((j) => j.status !== 'empty').length} of 3`,
-              },
-              {
-                label: 'Backend',
-                value: sessionId ? 'connected' : 'mock',
-              },
+              { label: 'CV',              value: workspace.cv.status === 'indexed' ? 'indexed' : 'pending' },
+              { label: 'JDs',             value: `${workspace.jds.filter((j) => j.status !== 'empty').length} of 3` },
+              { label: 'Backend',         value: sessionId ? 'connected' : 'mock' },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2 flex-shrink-0">
                 <span className="font-mono text-[10px] text-[#9A958F] uppercase tracking-widest">
@@ -199,6 +202,14 @@ export default function UploadWorkspace({ onNavigate, initialWorkspace }: Upload
                 </span>
               </div>
             ))}
+            {indexingSlotId && (
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <Loader2 className="w-3 h-3 text-[#6B6862] animate-spin" aria-hidden="true" />
+                <span className="font-mono text-[10px] text-[#6B6862] uppercase tracking-widest">
+                  embedding…
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>

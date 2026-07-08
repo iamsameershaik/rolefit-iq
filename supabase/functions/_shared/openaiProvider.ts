@@ -1,80 +1,86 @@
 import type { AIProvider, AnalysisInput, AnalysisOutput, GroundedAnswerInput, GroundedAnswerOutput, RewriteInput, RewriteOutput } from "./aiProvider.ts";
+import { EMBEDDING } from "./constants.ts";
+import { createLogger } from "./logger.ts";
 
-// ── OpenAI Provider (Phase 2 scaffold) ──────────────────────────
-// This class satisfies the AIProvider interface using OpenAI APIs.
+// OpenAI Provider — active AI provider for MVP.
 //
-// Phase 1: All methods throw NotImplementedError — no API calls are made.
-// Phase 2: Replace each throw with real implementation:
-//   - createEmbedding   → POST /embeddings  (model: text-embedding-3-small)
-//   - generateStructuredAnalysis → POST /chat/completions with JSON mode
-//   - generateGroundedAnswer     → POST /chat/completions with retrieved context
-//   - generateRewriteRecommendations → POST /chat/completions
+// Embeddings: text-embedding-3-small (1536 dims, cost-efficient, strong retrieval quality).
+// This model was chosen over ada-002 for its lower cost at equivalent retrieval quality
+// and over text-embedding-3-large for its smaller dimension footprint (1536 vs 3072),
+// which keeps the ivfflat index compact and query latency low.
 //
-// Required secret (Phase 2): OPENAI_API_KEY
-//   Set via: Supabase Dashboard → Edge Functions → Secrets
-//   Do NOT add to frontend .env — this key must stay server-side.
+// Analysis + chat (Phase 3): gpt-4o / gpt-4o-mini — see LLM constants.
 //
-// Model choices (Phase 2 defaults):
-//   Embeddings: text-embedding-3-small (1536 dims, cost-efficient)
-//   Analysis:   gpt-4o (structured JSON output, high reasoning)
-//   Chat:       gpt-4o-mini (lower latency for conversational responses)
-//
-// Swap to AWS Bedrock: implement BedrockProvider in bedrockProvider.stub.ts
-// and update the provider factory — zero changes to business logic required.
+// Provider swap: implement BedrockProvider satisfying this same AIProvider interface
+// and update the factory in each Edge Function — zero changes to business logic.
 
-class NotImplementedError extends Error {
-  constructor(method: string) {
-    super(
-      `OpenAI provider method '${method}' is not implemented in Phase 1. ` +
-      "This will be wired in Phase 2 when OPENAI_API_KEY is available. " +
-      "The Edge Function placeholder returns a descriptive message instead."
-    );
-    this.name = "NotImplementedError";
-  }
-}
+const log = createLogger("openaiProvider");
 
 export class OpenAIProvider implements AIProvider {
   private apiKey: string;
+  // Allow OPENAI_EMBEDDING_MODEL secret to override default at runtime without code changes.
+  private embeddingModel: string;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, embeddingModel?: string) {
     this.apiKey = apiKey;
+    this.embeddingModel = embeddingModel ?? EMBEDDING.MODEL;
   }
 
-  async createEmbedding(_input: string): Promise<number[]> {
-    // Phase 2 implementation:
-    // const response = await fetch("https://api.openai.com/v1/embeddings", {
-    //   method: "POST",
-    //   headers: { "Authorization": `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
-    //   body: JSON.stringify({ model: "text-embedding-3-small", input: _input }),
-    // });
-    // const data = await response.json();
-    // return data.data[0].embedding;
-    throw new NotImplementedError("createEmbedding");
+  async createEmbedding(input: string): Promise<number[]> {
+    if (!input || input.trim().length === 0) {
+      throw new Error("createEmbedding: input must be non-empty");
+    }
+
+    // Trim to stay well under the model's 8191-token limit.
+    // Chunks are ~600 tokens so trimming is a safety net, not normal behaviour.
+    const trimmed = input.slice(0, EMBEDDING.MAX_INPUT_CHARS);
+
+    const started = Date.now();
+
+    const response = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: this.embeddingModel,
+        input: trimmed,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      throw new Error(`OpenAI embeddings error ${response.status}: ${errText.slice(0, 200)}`);
+    }
+
+    const data = await response.json() as { data: Array<{ embedding: number[] }> };
+
+    if (!Array.isArray(data.data?.[0]?.embedding)) {
+      throw new Error("OpenAI embeddings returned unexpected response shape");
+    }
+
+    // Log model + latency only — never log the input text
+    log.info("Embedding created", {
+      metadata: {
+        model: this.embeddingModel,
+        dimensions: data.data[0].embedding.length,
+        latency_ms: Date.now() - started,
+      },
+    });
+
+    return data.data[0].embedding;
   }
 
   async generateStructuredAnalysis(_input: AnalysisInput): Promise<AnalysisOutput> {
-    // Phase 2 implementation:
-    // Build a structured prompt using prompts.ts ANALYSIS_PROMPT.
-    // Call gpt-4o with response_format: { type: "json_object" }.
-    // Parse and validate the JSON output.
-    // Return typed AnalysisOutput.
-    throw new NotImplementedError("generateStructuredAnalysis");
+    throw new Error("generateStructuredAnalysis not implemented — Phase 3");
   }
 
   async generateGroundedAnswer(_input: GroundedAnswerInput): Promise<GroundedAnswerOutput> {
-    // Phase 2 implementation:
-    // Build context from _input.retrieved_chunks.
-    // Include conversation_history for multi-turn awareness.
-    // Use GROUNDED_ANSWER_PROMPT from prompts.ts.
-    // Return answer with citations mapped from chunk IDs.
-    throw new NotImplementedError("generateGroundedAnswer");
+    throw new Error("generateGroundedAnswer not implemented — Phase 3");
   }
 
   async generateRewriteRecommendations(_input: RewriteInput): Promise<RewriteOutput> {
-    // Phase 2 implementation:
-    // Use REWRITE_PROMPT from prompts.ts.
-    // Guardrail: instruct model to only strengthen existing evidence.
-    // Include do_not_claim as a model constraint.
-    throw new NotImplementedError("generateRewriteRecommendations");
+    throw new Error("generateRewriteRecommendations not implemented — Phase 3");
   }
 }

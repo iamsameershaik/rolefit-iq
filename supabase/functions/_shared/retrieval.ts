@@ -1,34 +1,29 @@
+import type { AIProvider } from "./aiProvider.ts";
 import type { RetrievedChunk } from "./types.ts";
+import { RETRIEVAL, EMBEDDING } from "./constants.ts";
 
-// ── Retrieval pipeline (Phase 2 scaffold) ─────────────────────────
-// Retrieves evidence chunks via pgvector similarity search.
+// ── Retrieval pipeline ────────────────────────────────────────────
 //
-// Design decisions for Phase 2:
-//
-// Retrieval strategy: dense vector search via pgvector cosine similarity
-//   - Query: embed the user question or JD requirement using the same model
-//   - Search: call match_chunks() RPC with session_id scoping
-//   - Reranking (Phase 3+): optional cross-encoder reranking for precision
+// Dense vector search via pgvector cosine similarity.
 //
 // Why pgvector instead of a dedicated vector DB (Pinecone, Weaviate, etc.):
-//   - Supabase already handles persistence — zero additional infrastructure
-//   - pgvector with ivfflat is sufficient for datasets up to ~1M vectors
-//   - All data stays in one system — simpler ops, consistent transactions
-//   - Swap path: if scale demands it, add a Pinecone sync alongside pgvector
-//     without changing the match_chunks() interface the rest of the code uses
+//   Supabase already handles persistence — zero additional infrastructure.
+//   pgvector with ivfflat is sufficient for single-session datasets (~20–100 chunks).
+//   All data stays in one system: consistent transactions, simpler ops, one backup.
+//   Swap path: if scale demands it, mirror embeddings to a dedicated vector store
+//   without changing the retrieveRelevantChunks() interface the rest of the code uses.
 //
 // Retrieval parameters:
-//   match_count=8 — sufficient for most analysis prompts (fits in context window)
-//   Increase to 16-20 for full-document analysis tasks
-//
-// Evidence scoping:
-//   For fit analysis: retrieve from BOTH resume AND specific jd (by job_index)
-//   For grounded chat: retrieve from all documents in the session
-//   For rewrite: retrieve from resume only, with JD requirements as query
+//   match_count=8 fits comfortably in a gpt-4o context window for analysis prompts.
+//   Increase to 16 for full-document analysis; see RETRIEVAL.ANALYSIS_MATCH_COUNT.
 
-export interface RetrievalQuery {
+// deno-lint-ignore no-explicit-any
+type SupabaseClient = any;
+
+export interface RetrievalInput {
   session_id: string;
-  query_embedding: number[];
+  /** Plain text query — embedding is created internally by this function. */
+  query: string;
   match_count?: number;
   filter_document_type?: "resume" | "job_description" | null;
   filter_job_index?: number | null;
@@ -36,35 +31,61 @@ export interface RetrievalQuery {
 
 export interface RetrievalResult {
   chunks: RetrievedChunk[];
+  embedding_latency_ms: number;
   retrieval_latency_ms: number;
+  embedding_model: string;
 }
 
 /**
- * Retrieve evidence chunks via pgvector similarity search.
- * Phase 1: Returns empty result — retrieval runs in Phase 2.
- * Phase 2: Call the match_chunks() Supabase RPC with the query embedding.
+ * Retrieve the most relevant chunks for a query using vector similarity search.
+ *
+ * Creates a query embedding, then calls the match_chunks() Supabase RPC which
+ * uses cosine distance (<=> operator) on the pgvector ivfflat index.
+ *
+ * Both the AIProvider and SupabaseClient are injected so this function has no
+ * global state and can be tested or swapped independently.
  */
-export async function retrieveChunks(
-  _supabase: unknown,
-  _query: RetrievalQuery
+export async function retrieveRelevantChunks(
+  supabase: SupabaseClient,
+  provider: AIProvider,
+  input: RetrievalInput,
 ): Promise<RetrievalResult> {
-  // TODO Phase 2: Implement retrieval
-  // const start = Date.now();
-  // const { data, error } = await supabase.rpc("match_chunks", {
-  //   query_embedding: query.query_embedding,
-  //   match_session_id: query.session_id,
-  //   match_count: query.match_count ?? 8,
-  //   filter_document_type: query.filter_document_type ?? null,
-  //   filter_job_index: query.filter_job_index ?? null,
-  // });
-  // if (error) throw error;
-  // return { chunks: data as RetrievedChunk[], retrieval_latency_ms: Date.now() - start };
-  return { chunks: [], retrieval_latency_ms: 0 };
+  const matchCount = Math.min(
+    input.match_count ?? RETRIEVAL.DEFAULT_MATCH_COUNT,
+    RETRIEVAL.MAX_MATCH_COUNT,
+  );
+
+  // 1. Embed the query using the same model used during document indexing
+  const embeddingStart = Date.now();
+  const queryEmbedding = await provider.createEmbedding(input.query);
+  const embeddingLatency = Date.now() - embeddingStart;
+
+  // 2. Vector similarity search via match_chunks RPC (SECURITY DEFINER function)
+  const retrievalStart = Date.now();
+  const { data, error } = await supabase.rpc("match_chunks", {
+    query_embedding:      queryEmbedding,
+    match_session_id:     input.session_id,
+    match_count:          matchCount,
+    filter_document_type: input.filter_document_type ?? null,
+    filter_job_index:     input.filter_job_index ?? null,
+  });
+  const retrievalLatency = Date.now() - retrievalStart;
+
+  if (error) {
+    throw new Error(`match_chunks RPC failed: ${error.message}`);
+  }
+
+  return {
+    chunks: (data as RetrievedChunk[]) ?? [],
+    embedding_latency_ms: embeddingLatency,
+    retrieval_latency_ms: retrievalLatency,
+    embedding_model: EMBEDDING.MODEL,
+  };
 }
 
 /**
- * Format retrieved chunks into a context block for LLM prompts.
- * Each chunk is labelled with its source for citation tracking.
+ * Format retrieved chunks into a labelled context block for LLM prompts.
+ * Each chunk is numbered and sourced for citation tracking in Phase 3.
  */
 export function formatChunksAsContext(chunks: RetrievedChunk[]): string {
   if (chunks.length === 0) return "[No retrieved evidence available]";

@@ -16,7 +16,6 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Accept session_id from query param (GET) or body (POST)
     let session_id: string;
     try {
       if (req.method === "GET") {
@@ -40,14 +39,10 @@ Deno.serve(async (req: Request) => {
       .is("deleted_at", null)
       .maybeSingle();
 
-    if (sessionError) {
-      return err("DB_ERROR", "Error fetching session", 500, sessionError.message);
-    }
-    if (!session) {
-      return err("NOT_FOUND", "Session not found or deleted", 404);
-    }
+    if (sessionError) return err("DB_ERROR", "Error fetching session", 500, sessionError.message);
+    if (!session)     return err("NOT_FOUND", "Session not found or deleted", 404);
 
-    // Fetch documents — omit raw_text (not needed by frontend, reduces payload size)
+    // Fetch documents — omit raw_text (reduces payload, keeps text server-side)
     const { data: documents, error: docsError } = await supabase
       .from("documents")
       .select("id, session_id, created_at, updated_at, document_type, title, file_name, mime_type, text_char_count, status, job_index, parse_warning, deleted_at")
@@ -58,6 +53,29 @@ Deno.serve(async (req: Request) => {
     if (docsError) {
       log.warn("Error fetching documents", { session_id, metadata: { error: docsError.message } });
     }
+
+    // Fetch chunk document_ids in one query; group client-side to get per-document counts.
+    // Avoids N queries for N documents and stays within supabase-js's no-GROUP-BY constraint.
+    const { data: chunkDocIds, error: chunkCountError } = await supabase
+      .from("chunks")
+      .select("document_id")
+      .eq("session_id", session_id)
+      .is("deleted_at", null);
+
+    if (chunkCountError) {
+      log.warn("Error fetching chunk counts", { session_id, metadata: { error: chunkCountError.message } });
+    }
+
+    const chunkCountByDoc: Record<string, number> = {};
+    for (const row of chunkDocIds ?? []) {
+      chunkCountByDoc[row.document_id] = (chunkCountByDoc[row.document_id] ?? 0) + 1;
+    }
+    const totalChunks = Object.values(chunkCountByDoc).reduce((a, b) => a + b, 0);
+
+    const documentsWithCounts = (documents ?? []).map((doc: { id: string }) => ({
+      ...doc,
+      chunk_count: chunkCountByDoc[doc.id] ?? 0,
+    }));
 
     // Fetch analyses
     const { data: analyses, error: analysesError } = await supabase
@@ -82,7 +100,7 @@ Deno.serve(async (req: Request) => {
       log.warn("Error fetching chat messages", { session_id, metadata: { error: chatError.message } });
     }
 
-    // Fetch ai_events summary — count and most recent event only
+    // Fetch recent ai_events for observability summary
     const { data: events, error: eventsError } = await supabase
       .from("ai_events")
       .select("id, event_type, stage, status, created_at, latency_ms")
@@ -94,12 +112,16 @@ Deno.serve(async (req: Request) => {
       log.warn("Error fetching ai_events", { session_id, metadata: { error: eventsError.message } });
     }
 
-    log.info("Session fetched", { session_id, metadata: { status: session.status } });
+    log.info("Session fetched", {
+      session_id,
+      metadata: { status: session.status, total_chunks: totalChunks },
+    });
 
     return ok({
       session,
-      documents: documents ?? [],
-      analyses: analyses ?? [],
+      documents:     documentsWithCounts,
+      total_chunks:  totalChunks,
+      analyses:      analyses ?? [],
       chat_messages: chat_messages ?? [],
       event_summary: {
         total_events: events?.length ?? 0,
