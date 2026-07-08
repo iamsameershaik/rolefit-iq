@@ -18,8 +18,8 @@
 // 1. Add AWS credentials as Supabase Edge Function secrets:
 //      AWS_ACCESS_KEY_ID
 //      AWS_SECRET_ACCESS_KEY
-//      AWS_REGION (e.g. "us-east-1")
-//      BEDROCK_MODEL_ID (e.g. "anthropic.claude-3-5-sonnet-20241022-v2:0")
+//      A region variable (e.g. set to "us-east-1")
+//      A model ID variable (e.g. set to "anthropic.claude-3-5-sonnet-20241022-v2:0")
 //
 // 2. Implement BedrockProvider satisfying the AIProvider interface:
 //
@@ -70,10 +70,9 @@
 //      const provider = new OpenAIProvider(Deno.env.get("OPENAI_API_KEY")!);
 //
 //    After (Phase 3):
-//      const provider = new BedrockProvider(
-//        Deno.env.get("AWS_REGION")!,
-//        Deno.env.get("BEDROCK_MODEL_ID")!
-//      );
+//      const region  = env.get("YOUR_AWS_REGION_SECRET")!;
+//      const modelId = env.get("YOUR_BEDROCK_MODEL_SECRET")!;
+//      const provider = new BedrockProvider(region, modelId);
 //
 // That is the complete swap. Zero changes to business logic.
 //
