@@ -11,6 +11,7 @@ import RiskFlagsPanel from '../components/dashboard/RiskFlagsPanel';
 import InterviewPrepPanel from '../components/dashboard/InterviewPrepPanel';
 import RewriteRecommendationsPanel from '../components/dashboard/RewriteRecommendationsPanel';
 import SystemTracePanel from '../components/dashboard/SystemTracePanel';
+import ScoreExplanationDrawer from '../components/dashboard/ScoreExplanationDrawer';
 import AssistantPanel from '../components/chat/AssistantPanel';
 import { candidateProfile, jdAnalyses, roleFitMatrix } from '../data/mockData';
 import { getSession } from '../lib/apiClient';
@@ -86,6 +87,7 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
   const [loadError, setLoadError]         = useState<string | null>(null);
   const [sessionStatus, setSessionStatus] = useState<string | null>(null);
   const [resumeDoc, setResumeDoc]         = useState<DocumentData | undefined>(undefined);
+  const [explainAnalysis, setExplainAnalysis] = useState<JDAnalysis | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -137,6 +139,7 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
   const docsIndexed = isRealMode ? docCount : 4;
 
   return (
+    <>
     <div className="bg-[#F4F1EA] min-h-screen">
       <div className="border-b border-[#DDD8CE] bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
@@ -330,6 +333,7 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
                   topMatchedSkills={jd.matchedSkills}
                   topGap={jd.missingSkills[0] ?? '—'}
                   onViewDetail={() => onNavigate('jd-detail', jd.id)}
+                  onScoreClick={() => setExplainAnalysis(jd)}
                 />
               ))}
               {/* Add more JDs slot (real mode, slots remaining) */}
@@ -411,5 +415,13 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
         </div>
       )}
     </div>
+
+    {explainAnalysis && (
+      <ScoreExplanationDrawer
+        analysis={explainAnalysis}
+        onClose={() => setExplainAnalysis(null)}
+      />
+    )}
+    </>
   );
 }

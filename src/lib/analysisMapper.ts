@@ -144,6 +144,7 @@ export function mapAnalysisRow(row: AnalysisRowData, jdDoc?: DocumentData): JDAn
     title,
     company,
     location,
+    jobDocumentId:         row.job_document_id ?? undefined,
     fitTier:               toFitTier(row.fit_tier),
     explainableFitEstimate: clamp(row.fit_estimate, 0, 100),
     evidenceStrength:      toEvidenceStrength(row.evidence_strength),

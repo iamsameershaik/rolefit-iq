@@ -126,6 +126,8 @@ export interface JDAnalysis {
   strongestAlignment: string[];
   weakestAlignment: string[];
   candidateNarrative: string;
+  /** Raw job_document_id from backend — used to call generate-tailored-cv */
+  jobDocumentId?: string;
 }
 
 export interface CandidateProfile {
@@ -151,4 +153,47 @@ export interface ChatMessage {
   content: string;
   citations?: EvidenceSnippetType[];
   timestamp: string;
+}
+
+// ── Tailored CV types ───────────────────────────────────────────
+
+export interface TailoredCVBullet {
+  section: string;
+  original_signal: string;
+  tailored_bullet: string;
+  evidence_basis: string;
+  confidence: 'High' | 'Medium' | 'Low';
+}
+
+export interface TailoredCVProjectBullet {
+  project_name: string;
+  tailored_bullet: string;
+  evidence_basis: string;
+  confidence: 'High' | 'Medium' | 'Low';
+}
+
+export interface TailoredCV {
+  target_role: {
+    role_title: string;
+    company_name: string | null;
+    location: string | null;
+  };
+  candidate: {
+    name: string;
+    headline: string;
+    location: string | null;
+  };
+  tailored_cv: {
+    professional_summary: string;
+    core_skills: string[];
+    experience_bullets: TailoredCVBullet[];
+    project_bullets: TailoredCVProjectBullet[];
+    keyword_alignment: string[];
+    do_not_claim: string[];
+    preparation_gaps: string[];
+  };
+  notes: {
+    grounding_summary: string;
+    limitations: string[];
+  };
 }

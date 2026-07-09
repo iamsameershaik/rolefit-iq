@@ -3,6 +3,7 @@ import Badge from '../shared/Badge';
 
 interface Props {
   analysis: JDAnalysis;
+  onScoreClick?: () => void;
 }
 
 function fitColor(score: number) {
@@ -11,7 +12,7 @@ function fitColor(score: number) {
   return '#92600A';
 }
 
-export default function JDDetailHeader({ analysis }: Props) {
+export default function JDDetailHeader({ analysis, onScoreClick }: Props) {
   const color = fitColor(analysis.explainableFitEstimate);
 
   return (
@@ -38,14 +39,26 @@ export default function JDDetailHeader({ analysis }: Props) {
           </div>
         </div>
 
-        {/* Score */}
+        {/* Score — clickable to open explainability drawer */}
         <div className="flex-shrink-0 text-right">
           <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-1">
             Explainable fit estimate
           </p>
-          <p className="font-mono text-4xl font-bold leading-none" style={{ color }}>
-            {analysis.explainableFitEstimate}
-          </p>
+          <button
+            onClick={onScoreClick}
+            disabled={!onScoreClick}
+            className="group text-right focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#111111] rounded-sm"
+            aria-label={`Score ${analysis.explainableFitEstimate} — click to see why`}
+          >
+            <p className="font-mono text-4xl font-bold leading-none group-hover:opacity-80 transition-opacity" style={{ color }}>
+              {analysis.explainableFitEstimate}
+            </p>
+            {onScoreClick && (
+              <p className="font-mono text-[9px] text-[#9A958F] group-hover:text-[#111111] transition-colors mt-1 uppercase tracking-widest">
+                Why this score?
+              </p>
+            )}
+          </button>
           <div className="w-24 h-1 bg-[#F4F1EA] rounded-full mt-2 ml-auto overflow-hidden">
             <div
               className="h-full rounded-full"

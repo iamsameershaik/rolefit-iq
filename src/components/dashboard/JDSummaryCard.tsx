@@ -15,6 +15,7 @@ interface Props {
   topMatchedSkills: string[];
   topGap: string;
   onViewDetail: () => void;
+  onScoreClick?: () => void;
 }
 
 function fitColor(score: number) {
@@ -54,6 +55,7 @@ export default function JDSummaryCard({
   topMatchedSkills,
   topGap,
   onViewDetail,
+  onScoreClick,
 }: Props) {
   const color = fitColor(explainableFitEstimate);
 
@@ -81,9 +83,21 @@ export default function JDSummaryCard({
             <span className="font-mono text-[10px] text-[#9A958F] uppercase tracking-widest">
               Explainable fit estimate
             </span>
-            <span className="font-mono text-sm font-bold" style={{ color }}>
-              {explainableFitEstimate}
-            </span>
+            <button
+              onClick={onScoreClick}
+              disabled={!onScoreClick}
+              className="group flex items-center gap-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#111111] rounded-sm"
+              aria-label={`Score ${explainableFitEstimate} — click to see why`}
+            >
+              <span className="font-mono text-sm font-bold group-hover:opacity-70 transition-opacity" style={{ color }}>
+                {explainableFitEstimate}
+              </span>
+              {onScoreClick && (
+                <span className="font-mono text-[9px] text-[#9A958F] group-hover:text-[#111111] transition-colors hidden sm:inline">
+                  ?
+                </span>
+              )}
+            </button>
           </div>
           <div className="h-1 bg-[#F4F1EA] rounded-full overflow-hidden">
             <div
@@ -91,6 +105,14 @@ export default function JDSummaryCard({
               style={{ width: `${explainableFitEstimate}%`, backgroundColor: color }}
             />
           </div>
+          {onScoreClick && (
+            <button
+              onClick={onScoreClick}
+              className="font-mono text-[9px] text-[#9A958F] hover:text-[#111111] transition-colors mt-1 focus-visible:outline-none uppercase tracking-widest"
+            >
+              Why this score?
+            </button>
+          )}
         </div>
 
         {/* Signals */}

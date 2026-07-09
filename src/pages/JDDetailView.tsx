@@ -4,6 +4,8 @@ import RetroColorBars from '../components/brand/RetroColorBars';
 import JDSelector from '../components/detail/JDSelector';
 import JDDetailHeader from '../components/detail/JDDetailHeader';
 import JDDetailTabs from '../components/detail/JDDetailTabs';
+import TailoredCVGenerator from '../components/dashboard/TailoredCVGenerator';
+import ScoreExplanationDrawer from '../components/dashboard/ScoreExplanationDrawer';
 import Badge from '../components/shared/Badge';
 import type { Page, JDAnalysis } from '../types';
 import { jdAnalyses } from '../data/mockData';
@@ -65,6 +67,7 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId, onAdd
   const fallbackId   = displayAnalyses[0]?.id ?? 'jd-1';
   const [selectedId, setSelectedId] = useState(initialJdId ?? fallbackId);
   const [activeTab, setActiveTab]   = useState<Tab>('overview');
+  const [scoreDrawerOpen, setScoreDrawerOpen] = useState(false);
 
   // When real analyses load, ensure selectedId stays valid
   useEffect(() => {
@@ -76,6 +79,7 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId, onAdd
   const analysis = displayAnalyses.find((j) => j.id === selectedId) ?? displayAnalyses[0];
 
   return (
+    <>
     <div className="bg-[#F4F1EA] min-h-screen">
       <div className="border-b border-[#DDD8CE] bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
@@ -188,7 +192,7 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId, onAdd
           </aside>
 
           <div className="min-w-0 space-y-4">
-            <JDDetailHeader analysis={analysis} />
+            <JDDetailHeader analysis={analysis} onScoreClick={() => setScoreDrawerOpen(true)} />
 
             <div className="bg-white border border-[#DDD8CE] rounded-sm overflow-hidden">
               <JDDetailTabs
@@ -441,6 +445,18 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId, onAdd
                       </div>
                     )}
 
+                    <div className="border-t border-[#DDD8CE] pt-5">
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-3">
+                        One-click tailored CV draft
+                      </p>
+                      <TailoredCVGenerator
+                        sessionId={isRealMode ? sessionId! : null}
+                        jobDocumentId={analysis.jobDocumentId ?? null}
+                        jobTitle={analysis.title}
+                        analysisAvailable={!!analysis.fitSummary}
+                      />
+                    </div>
+
                     <p className="font-mono text-[10px] text-[#9A958F] border-t border-[#DDD8CE] pt-3">
                       These recommendations should only strengthen evidence already present in the CV. They should not invent experience.
                     </p>
@@ -453,5 +469,13 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId, onAdd
       </div>
       )}
     </div>
+
+    {scoreDrawerOpen && analysis && (
+      <ScoreExplanationDrawer
+        analysis={analysis}
+        onClose={() => setScoreDrawerOpen(false)}
+      />
+    )}
+  </>
   );
 }
