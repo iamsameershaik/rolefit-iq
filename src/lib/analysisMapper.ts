@@ -110,7 +110,8 @@ function asArray<T>(v: unknown): T[] {
 
 export function mapAnalysisRow(row: AnalysisRowData, jdDoc?: DocumentData): JDAnalysis {
   const jobIndex = row.job_index ?? 1;
-  const jdId     = `jd-${jobIndex}`;
+  // Use job_document_id for a stable, unique tab ID when available
+  const jdId     = row.job_document_id ? `jd-doc-${row.job_document_id}` : `jd-${jobIndex}`;
 
   // Prefer JD document metadata for title/company/location
   const jdMeta = (jdDoc?.metadata ?? {}) as Record<string, unknown>;
@@ -208,8 +209,16 @@ export function mapAnalysesArray(
   rows: AnalysisRowData[],
   docsByJobIndex?: Record<number, DocumentData>,
 ): JDAnalysis[] {
-  return rows
-    .filter((r) => r.job_index !== null)
+  // Deduplicate by job_index — keep the most recently created row per job
+  const latestByJobIndex = new Map<number, AnalysisRowData>();
+  for (const row of rows) {
+    if (row.job_index === null) continue;
+    const existing = latestByJobIndex.get(row.job_index);
+    if (!existing || row.created_at > existing.created_at) {
+      latestByJobIndex.set(row.job_index, row);
+    }
+  }
+  return [...latestByJobIndex.values()]
     .sort((a, b) => (a.job_index ?? 0) - (b.job_index ?? 0))
     .map((r) => mapAnalysisRow(r, docsByJobIndex?.[r.job_index ?? 0]));
 }

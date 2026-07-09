@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2, AlertCircle, PlusSquare } from 'lucide-react';
 import RetroColorBars from '../components/brand/RetroColorBars';
 import CandidateSummaryCard from '../components/dashboard/CandidateSummaryCard';
 import JDSummaryCard from '../components/dashboard/JDSummaryCard';
@@ -20,6 +20,7 @@ import type { Page, JDAnalysis, Strength, SkillGap, RiskFlag, InterviewQuestion,
 interface Props {
   onNavigate: (page: Page, jdId?: string) => void;
   sessionId?: string | null;
+  onNewWorkspace?: () => void;
 }
 
 function buildConsolidated(analyses: JDAnalysis[]) {
@@ -67,7 +68,7 @@ function buildCandidateProfile(resumeDoc: DocumentData | undefined, totalChunks:
   };
 }
 
-export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
+export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace }: Props) {
   const isRealMode = !!sessionId;
 
   const [realAnalyses, setRealAnalyses]       = useState<JDAnalysis[] | null>(null);
@@ -131,14 +132,26 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
     <div className="bg-[#F4F1EA] min-h-screen">
       <div className="border-b border-[#DDD8CE] bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
-          <button
-            onClick={() => onNavigate('upload')}
-            className="flex items-center gap-1.5 text-xs font-mono text-[#9A958F] hover:text-[#111111] transition-colors uppercase tracking-widest mb-4 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#111111] rounded-sm"
-            aria-label="Back to workspace"
-          >
-            <ArrowLeft className="w-3 h-3" aria-hidden="true" />
-            workspace
-          </button>
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => onNavigate('upload')}
+              className="flex items-center gap-1.5 text-xs font-mono text-[#9A958F] hover:text-[#111111] transition-colors uppercase tracking-widest focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#111111] rounded-sm"
+              aria-label="Back to workspace"
+            >
+              <ArrowLeft className="w-3 h-3" aria-hidden="true" />
+              workspace
+            </button>
+            {isRealMode && onNewWorkspace && (
+              <button
+                onClick={onNewWorkspace}
+                className="flex items-center gap-1.5 text-xs font-mono text-[#9A958F] hover:text-[#111111] transition-colors uppercase tracking-widest focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#111111] rounded-sm"
+                aria-label="Start a new workspace"
+              >
+                <PlusSquare className="w-3 h-3" aria-hidden="true" />
+                new workspace
+              </button>
+            )}
+          </div>
           <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862] mb-1">
             {isRealMode ? (
               <span>

@@ -43,6 +43,7 @@ export default function App() {
         <ResultsDashboard
           onNavigate={(p, jdId) => navigate(p, jdId)}
           sessionId={sessionId}
+          onNewWorkspace={() => { setSessionId(null); navigate('upload'); }}
         />
       )}
       {page === 'jd-detail' && (
