@@ -52,9 +52,6 @@ export const AI_EVENT_TYPE = {
   RETRIEVAL_EXECUTED:       "retrieval_executed",
   RETRIEVAL_TESTED:         "retrieval_tested",
   EMBEDDING_CREATED:        "embedding_created",
-  TAILORED_CV_STARTED:      "tailored_cv_started",
-  TAILORED_CV_COMPLETED:    "tailored_cv_completed",
-  TAILORED_CV_FAILED:       "tailored_cv_failed",
 } as const;
 
 // Chunking parameters

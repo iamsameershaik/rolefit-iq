@@ -6,7 +6,6 @@ export const PROMPT_NAMES = {
   FIT_ANALYSIS:    "rolefit_iq_fit_analysis_v2",
   GROUNDED_ANSWER: "rolefit_iq_grounded_answer_v1",
   CV_REWRITE:      "rolefit_iq_cv_rewrite_v1",
-  TAILORED_CV:     "rolefit_iq_tailored_cv_v1",
 } as const;
 
 // ── Shared guardrails ────────────────────────────────────────────
@@ -143,95 +142,6 @@ ${candidateContext}
 ${jdContext}
 
 Return the complete JSON analysis following the schema exactly.`;
-
-  return { system, user };
-}
-
-// ── Tailored CV generation prompt ────────────────────────────────
-export function buildTailoredCVPrompt(
-  candidateText: string,
-  jdText: string,
-  jobTitle: string,
-  analysisSummary: string,
-): { system: string; user: string } {
-  const system = `You are RoleFit IQ, a grounded career intelligence engine.
-Generate a tailored CV draft for a specific job description.
-
-${GUARDRAILS}
-
-CRITICAL RULES — violation is not acceptable:
-- Only use evidence explicitly present in the candidate's CV text.
-- Do NOT invent employers, job titles, dates, degrees, certifications, metrics, tools, or any experience.
-- Do NOT fabricate production, cloud, security, or client experience not in the CV.
-- If a requirement cannot be met by the CV, put it under do_not_claim or preparation_gaps.
-- Confidence levels: "High" = direct CV evidence, "Medium" = adjacent/transferable, "Low" = weakly implied.
-- tailored_bullet must only strengthen wording of existing bullets, never invent new ones.
-
-REQUIRED JSON OUTPUT SCHEMA (respond with valid JSON only, no markdown):
-{
-  "target_role": {
-    "role_title": string,
-    "company_name": string | null,
-    "location": string | null
-  },
-  "candidate": {
-    "name": string,
-    "headline": string,
-    "location": string | null
-  },
-  "tailored_cv": {
-    "professional_summary": string,
-    "core_skills": string[],
-    "experience_bullets": [
-      {
-        "section": string,
-        "original_signal": string,
-        "tailored_bullet": string,
-        "evidence_basis": string,
-        "confidence": "High" | "Medium" | "Low"
-      }
-    ],
-    "project_bullets": [
-      {
-        "project_name": string,
-        "tailored_bullet": string,
-        "evidence_basis": string,
-        "confidence": "High" | "Medium" | "Low"
-      }
-    ],
-    "keyword_alignment": string[],
-    "do_not_claim": string[],
-    "preparation_gaps": string[]
-  },
-  "notes": {
-    "grounding_summary": string,
-    "limitations": string[]
-  }
-}
-
-FIELD RULES:
-- professional_summary: 3–4 sentences. Highlight strongest alignments. Use hedged language.
-- core_skills: Max 12. Only list skills demonstrably present in the CV.
-- experience_bullets: 3–6 bullets from existing experience, reworded to surface relevant signals.
-- project_bullets: 0–4. Only if projects are present in CV.
-- keyword_alignment: Keywords from JD that are already evidenced in CV.
-- do_not_claim: Claims the candidate MUST NOT make — things not in their CV.
-- preparation_gaps: Requirements missing from CV with a suggested preparation action.
-- grounding_summary: Brief note on how strongly the CV matches this JD.
-- limitations: What the tailored CV cannot address due to missing evidence.`;
-
-  const user = `Generate a tailored CV for this role: ${jobTitle}
-
-=== CANDIDATE CV ===
-${candidateText}
-
-=== JOB DESCRIPTION ===
-${jdText}
-
-=== FIT ANALYSIS CONTEXT ===
-${analysisSummary}
-
-Return the complete tailored CV JSON. Preserve honesty — mark confidence accurately.`;
 
   return { system, user };
 }

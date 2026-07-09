@@ -4,7 +4,7 @@ import RetroColorBars from '../components/brand/RetroColorBars';
 import JDSelector from '../components/detail/JDSelector';
 import JDDetailHeader from '../components/detail/JDDetailHeader';
 import JDDetailTabs from '../components/detail/JDDetailTabs';
-import TailoredCVGenerator from '../components/dashboard/TailoredCVGenerator';
+
 import ScoreExplanationDrawer from '../components/dashboard/ScoreExplanationDrawer';
 import Badge from '../components/shared/Badge';
 import type { Page, JDAnalysis } from '../types';
@@ -445,17 +445,6 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId, onAdd
                       </div>
                     )}
 
-                    <div className="border-t border-[#DDD8CE] pt-5">
-                      <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-3">
-                        One-click tailored CV draft
-                      </p>
-                      <TailoredCVGenerator
-                        sessionId={isRealMode ? sessionId! : null}
-                        jobDocumentId={analysis.jobDocumentId ?? null}
-                        jobTitle={analysis.title}
-                        analysisAvailable={!!analysis.fitSummary}
-                      />
-                    </div>
 
                     <p className="font-mono text-[10px] text-[#9A958F] border-t border-[#DDD8CE] pt-3">
                       These recommendations should only strengthen evidence already present in the CV. They should not invent experience.

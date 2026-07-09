@@ -229,20 +229,6 @@ export function testRetrieval(payload: {
   return callFunction<TestRetrievalResult>("test-retrieval", { body: payload });
 }
 
-export interface TailoredCVResult {
-  session_id: string;
-  job_document_id: string;
-  job_title: string;
-  tailored_cv: unknown;
-}
-
-export function generateTailoredCV(payload: {
-  session_id: string;
-  job_document_id: string;
-}) {
-  return callFunction<TailoredCVResult>("generate-tailored-cv", { body: payload });
-}
-
 export function deleteSession(sessionId: string) {
   return callFunction<{ session_id: string; deleted: boolean }>("delete-session", {
     body: { session_id: sessionId },
