@@ -80,7 +80,9 @@ export default function AssistantPanel({ sessionId, jdCount }: Props) {
   const suggestedPrompts = buildSuggestedPrompts(jdCount, isRealMode);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messages.length > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   async function sendReal(text: string) {

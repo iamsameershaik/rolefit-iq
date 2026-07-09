@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { ArrowLeft, ArrowRight, Info, Loader2 } from 'lucide-react';
 import Button from '../components/shared/Button';
 import UploadCard from '../components/upload/UploadCard';
@@ -33,13 +33,14 @@ export default function UploadWorkspace({
   const [workspace, setWorkspace] = useState<WorkspaceState>(
     initialWorkspace ? cloneWorkspace(initialWorkspace) : cloneWorkspace(emptyWorkspace)
   );
-  // Use external sessionId if provided (restored from App state on back-navigation)
   const [localSessionId, setLocalSessionId] = useState<string | null>(externalSessionId ?? null);
   const [apiError, setApiError]             = useState<string | null>(null);
   const [indexingSlotId, setIndexingSlotId] = useState<string | null>(null);
   const [isAnalysing, setIsAnalysing]       = useState(false);
   const [isDeleting, setIsDeleting]         = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm]    = useState(false);
+  const [showReplaceConfirm, setShowReplaceConfirm]  = useState(false);
+  const pendingCVUpload = useRef<{ slot: DocumentSlot; rawText: string } | null>(null);
 
   const activeSessionId = localSessionId ?? externalSessionId ?? null;
 
@@ -47,9 +48,21 @@ export default function UploadWorkspace({
   const indexedCount  = allSlots.filter((s) => s.status === 'indexed').length;
   const hasCV         = workspace.cv.status !== 'empty';
   const hasAnyJD      = workspace.jds.some((j) => j.status !== 'empty');
-  // Real session: docs already live in the backend — allow analysis even if local
-  // workspace slots were cleared by back-navigation.
   const canAnalyse    = activeSessionId ? true : (hasCV && hasAnyJD);
+
+  // ── Pipeline stage ──────────────────────────────────────────────
+  // Compute which stage the pipeline has reached based on real state.
+  const activeStage: string | undefined = (() => {
+    if (isAnalysing) return 'analyse';
+    if (indexingSlotId) {
+      // Active indexing: show chunk or embed based on whether CV is already done
+      return workspace.cv.status === 'indexed' ? 'embed' : 'chunk';
+    }
+    if (indexedCount === 0) return undefined;
+    if (canAnalyse && !activeSessionId) return 'analyse';  // demo mode ready
+    if (activeSessionId && indexedCount > 0) return 'embed'; // real docs indexed
+    return 'chunk';
+  })();
 
   function handleSlotChange(id: string, updates: Partial<DocumentSlot>) {
     setWorkspace((prev) => {
@@ -70,7 +83,7 @@ export default function UploadWorkspace({
     setIndexingSlotId(null);
   }
 
-  async function handleRealUpload(slot: DocumentSlot, rawText: string) {
+  async function doRealUpload(slot: DocumentSlot, rawText: string) {
     setApiError(null);
     setIndexingSlotId(slot.id);
     try {
@@ -115,11 +128,51 @@ export default function UploadWorkspace({
     }
   }
 
+  async function handleRealUpload(slot: DocumentSlot, rawText: string) {
+    // If uploading a new CV into an existing session, ask for confirmation first.
+    if (slot.type === 'cv' && activeSessionId) {
+      pendingCVUpload.current = { slot, rawText };
+      setShowReplaceConfirm(true);
+      return;
+    }
+    await doRealUpload(slot, rawText);
+  }
+
+  async function handleConfirmReplace() {
+    setShowReplaceConfirm(false);
+
+    // Soft-delete the existing session and start fresh.
+    if (activeSessionId) {
+      try {
+        await deleteSession(activeSessionId);
+      } catch {
+        // Non-fatal — old session cleanup best-effort
+      }
+    }
+
+    // Reset all local state to a clean workspace.
+    setLocalSessionId(null);
+    onSessionReady?.('');
+    setWorkspace(cloneWorkspace(emptyWorkspace));
+    setApiError(null);
+
+    // Now proceed with the pending CV upload in the new (sessionless) context.
+    const pending = pendingCVUpload.current;
+    pendingCVUpload.current = null;
+    if (pending) {
+      await doRealUpload(pending.slot, pending.rawText);
+    }
+  }
+
+  function handleCancelReplace() {
+    pendingCVUpload.current = null;
+    setShowReplaceConfirm(false);
+  }
+
   async function handleAnalyse() {
     if (!canAnalyse) return;
 
     if (!activeSessionId) {
-      // No real session — use mock demo flow
       onNavigate('results');
       return;
     }
@@ -150,7 +203,7 @@ export default function UploadWorkspace({
         setLocalSessionId(null);
         setWorkspace(cloneWorkspace(emptyWorkspace));
         setShowDeleteConfirm(false);
-        onSessionReady?.('');   // signal App to clear sessionId
+        onSessionReady?.('');
         onNavigate('landing');
       } else {
         setApiError(`Could not delete workspace: ${result.error.message}`);
@@ -164,12 +217,7 @@ export default function UploadWorkspace({
     }
   }
 
-  const totalChunks  = allSlots.reduce((sum, s) => sum + (s.chunkCount ?? 0), 0);
-  const activeStage  =
-    indexedCount === 0 ? null
-    : indexedCount < 4 ? 'extract'
-    : canAnalyse       ? 'analyse'
-    : 'chunk';
+  const totalChunks = allSlots.reduce((sum, s) => sum + (s.chunkCount ?? 0), 0);
 
   return (
     <div className="bg-[#F4F1EA] min-h-screen">
@@ -225,7 +273,7 @@ export default function UploadWorkspace({
           </div>
 
           <div className="mt-5">
-            <ProcessingPipeline activeStage={activeStage ?? undefined} />
+            <ProcessingPipeline activeStage={activeStage} />
           </div>
         </div>
       </div>
@@ -246,6 +294,34 @@ export default function UploadWorkspace({
             >
               dismiss
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* CV replace confirmation */}
+      {showReplaceConfirm && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[10px] text-[#92600A] uppercase tracking-widest mb-0.5">Replace CV?</p>
+              <p className="text-xs text-[#6B6862]">
+                Replacing the CV will reset this workspace's job descriptions, analyses, and chat history. A new workspace will be created.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={handleCancelReplace}
+                className="font-mono text-[10px] text-[#9A958F] hover:text-[#111111] uppercase tracking-widest focus-visible:outline-none"
+              >
+                cancel
+              </button>
+              <button
+                onClick={() => void handleConfirmReplace()}
+                className="font-mono text-[10px] text-[#92600A] border border-[#FADDAA] hover:border-[#92600A] uppercase tracking-widest px-3 py-1.5 rounded-sm transition-colors focus-visible:outline-none"
+              >
+                Replace &amp; reset
+              </button>
+            </div>
           </div>
         </div>
       )}

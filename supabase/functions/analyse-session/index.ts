@@ -59,10 +59,11 @@ Deno.serve(async (req: Request) => {
     // ── Fetch documents with raw_text ───────────────────────────
     const { data: documents, error: docsError } = await supabase
       .from("documents")
-      .select("id, document_type, job_index, title, raw_text, status")
+      .select("id, document_type, job_index, title, raw_text, status, created_at")
       .eq("session_id", session_id)
       .eq("status", "indexed")
-      .is("deleted_at", null);
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true });
 
     if (docsError) return err("DB_ERROR", "Error fetching documents: " + docsError.message, 500);
 
@@ -82,7 +83,8 @@ Deno.serve(async (req: Request) => {
         "No indexed job descriptions found in this session. Upload at least one JD.", 400);
     }
 
-    const cvDoc = cvDocs[0] as { id: string; raw_text: string; title: string | null };
+    // Pick the most recently created CV (last in ascending created_at order)
+    const cvDoc = cvDocs[cvDocs.length - 1] as { id: string; raw_text: string; title: string | null };
 
     log.info("Analysis starting", {
       session_id,
