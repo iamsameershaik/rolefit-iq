@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, ArrowRight, Info, Loader2 } from 'lucide-react';
 import Button from '../components/shared/Button';
 import UploadCard from '../components/upload/UploadCard';
@@ -6,7 +6,7 @@ import ProcessingPipeline from '../components/upload/ProcessingPipeline';
 import RetroColorBars from '../components/brand/RetroColorBars';
 import type { DocumentSlot, Page, WorkspaceState } from '../types';
 import { emptyWorkspace, sampleWorkspace } from '../data/mockData';
-import { createSession, uploadDocument, analyseSession, deleteSession } from '../lib/apiClient';
+import { createSession, uploadDocument, analyseSession, deleteSession, getSession } from '../lib/apiClient';
 
 interface UploadWorkspaceProps {
   onNavigate: (page: Page) => void;
@@ -38,13 +38,72 @@ export default function UploadWorkspace({
   const [indexingSlotId, setIndexingSlotId] = useState<string | null>(null);
   const [isAnalysing, setIsAnalysing]       = useState(false);
   const [isDeleting, setIsDeleting]         = useState(false);
+  const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm]   = useState(false);
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
   const [showResetSuccess, setShowResetSuccess]     = useState(false);
   const [showJdAdded, setShowJdAdded]               = useState(false);
+
+  // Track which job_indices are already occupied in the backend session
+  const [backendJdIndices, setBackendJdIndices] = useState<number[]>([]);
+
   const pendingCVUpload = useRef<{ slot: DocumentSlot; rawText: string } | null>(null);
+  // Track whether we've already hydrated from backend (prevent double-load)
+  const hydratedForSession = useRef<string | null>(null);
 
   const activeSessionId = localSessionId ?? externalSessionId ?? null;
+
+  // ── Hydrate from backend when navigating back to an existing session ──
+  useEffect(() => {
+    if (!activeSessionId) return;
+    if (hydratedForSession.current === activeSessionId) return;
+    hydratedForSession.current = activeSessionId;
+
+    setIsLoadingSession(true);
+    getSession(activeSessionId).then((result) => {
+      setIsLoadingSession(false);
+      if (!result.success) return;
+
+      const docs = result.data.documents ?? [];
+      const cvDoc = docs.find((d) => d.document_type === 'resume' && !d.status.includes('deleted'));
+      const jdDocs = docs.filter(
+        (d) => d.document_type === 'job_description' && d.status === 'indexed'
+      );
+
+      const occupiedIndices = jdDocs.map((d) => d.job_index ?? 0).filter(Boolean);
+      setBackendJdIndices(occupiedIndices);
+
+      setWorkspace((prev) => {
+        const next = cloneWorkspace(prev);
+
+        if (cvDoc) {
+          Object.assign(next.cv, {
+            status:    'indexed' as const,
+            fileName:  cvDoc.title ?? cvDoc.file_name ?? 'CV',
+            chunkCount: cvDoc.chunk_count ?? 0,
+            charCount:  cvDoc.text_char_count ?? undefined,
+          });
+        }
+
+        // Map each backend JD to its local slot by job_index
+        jdDocs.forEach((jd) => {
+          const idx = jd.job_index;
+          if (!idx || idx < 1 || idx > 3) return;
+          const slotIndex = idx - 1; // job_index 1→slot 0, 2→slot 1, 3→slot 2
+          Object.assign(next.jds[slotIndex], {
+            status:    'indexed' as const,
+            fileName:  jd.title ?? jd.file_name ?? `Job Description ${idx}`,
+            chunkCount: jd.chunk_count ?? 0,
+            charCount:  jd.text_char_count ?? undefined,
+          });
+        });
+
+        return next;
+      });
+    }).catch(() => {
+      setIsLoadingSession(false);
+    });
+  }, [activeSessionId]);
 
   const allSlots: DocumentSlot[] = [workspace.cv, ...workspace.jds];
   const indexedCount  = allSlots.filter((s) => s.status === 'indexed').length;
@@ -52,17 +111,20 @@ export default function UploadWorkspace({
   const hasAnyJD      = workspace.jds.some((j) => j.status !== 'empty');
   const canAnalyse    = activeSessionId ? true : (hasCV && hasAnyJD);
 
+  // Number of JD slots still available for upload
+  const backendJdCount = backendJdIndices.length;
+  const jdSlotsAvailable = 3 - backendJdCount;
+  const jdLimitReached = backendJdCount >= 3;
+
   // ── Pipeline stage ──────────────────────────────────────────────
-  // Compute which stage the pipeline has reached based on real state.
   const activeStage: string | undefined = (() => {
     if (isAnalysing) return 'analyse';
     if (indexingSlotId) {
-      // Active indexing: show chunk or embed based on whether CV is already done
       return workspace.cv.status === 'indexed' ? 'embed' : 'chunk';
     }
     if (indexedCount === 0) return undefined;
-    if (canAnalyse && !activeSessionId) return 'analyse';  // demo mode ready
-    if (activeSessionId && indexedCount > 0) return 'embed'; // real docs indexed
+    if (canAnalyse && !activeSessionId) return 'analyse';
+    if (activeSessionId && indexedCount > 0) return 'embed';
     return 'chunk';
   })();
 
@@ -85,6 +147,14 @@ export default function UploadWorkspace({
     setIndexingSlotId(null);
   }
 
+  /** Get the next available job_index (1, 2, or 3) not yet in use on the backend. */
+  function nextAvailableJobIndex(currentBackendIndices: number[]): number | null {
+    for (const i of [1, 2, 3]) {
+      if (!currentBackendIndices.includes(i)) return i;
+    }
+    return null;
+  }
+
   async function doRealUpload(slot: DocumentSlot, rawText: string) {
     setApiError(null);
     setIndexingSlotId(slot.id);
@@ -101,10 +171,18 @@ export default function UploadWorkspace({
         onSessionReady?.(sid);
       }
 
-      const docType  = slot.type === 'cv' ? 'resume' : 'job_description';
-      const jobIndex = slot.type === 'jd'
-        ? (parseInt(slot.id.replace(/\D/g, '').slice(-1)) || 1)
-        : null;
+      let jobIndex: number | null = null;
+      if (slot.type === 'jd') {
+        // Use next available backend index to prevent collisions with existing JDs
+        const freshIndices = backendJdIndices;
+        jobIndex = nextAvailableJobIndex(freshIndices);
+        if (jobIndex === null) {
+          setApiError('Maximum of 3 job descriptions reached. Remove one before uploading another.');
+          return;
+        }
+      }
+
+      const docType = slot.type === 'cv' ? 'resume' : 'job_description';
 
       const dr = await uploadDocument({
         session_id:    sid,
@@ -120,9 +198,13 @@ export default function UploadWorkspace({
           chunkCount: dr.data.chunks_created,
           charCount:  dr.data.document.text_char_count ?? rawText.length,
         });
-        // Notify user to re-run analysis when adding JDs to an existing session
-        if (slot.type === 'jd' && activeSessionId) {
-          setShowJdAdded(true);
+
+        if (slot.type === 'jd' && jobIndex !== null) {
+          // Record this index as occupied so subsequent uploads in the same session get the next slot
+          setBackendJdIndices((prev) => [...prev, jobIndex as number]);
+          if (activeSessionId) {
+            setShowJdAdded(true);
+          }
         }
       } else {
         setApiError(`Indexing note: ${dr.error.message}`);
@@ -135,7 +217,6 @@ export default function UploadWorkspace({
   }
 
   async function handleRealUpload(slot: DocumentSlot, rawText: string) {
-    // If uploading a new CV into an existing session, ask for confirmation first.
     if (slot.type === 'cv' && activeSessionId) {
       pendingCVUpload.current = { slot, rawText };
       setShowReplaceConfirm(true);
@@ -147,23 +228,22 @@ export default function UploadWorkspace({
   async function handleConfirmReplace() {
     setShowReplaceConfirm(false);
 
-    // Soft-delete the existing session and start fresh.
     if (activeSessionId) {
       try {
         await deleteSession(activeSessionId);
       } catch {
-        // Non-fatal — old session cleanup best-effort
+        // Non-fatal
       }
     }
 
-    // Reset all local state to a clean workspace.
     setLocalSessionId(null);
     onSessionReady?.('');
     setWorkspace(cloneWorkspace(emptyWorkspace));
+    setBackendJdIndices([]);
+    hydratedForSession.current = null;
     setApiError(null);
     setShowResetSuccess(true);
 
-    // Now proceed with the pending CV upload in the new (sessionless) context.
     const pending = pendingCVUpload.current;
     pendingCVUpload.current = null;
     if (pending) {
@@ -184,6 +264,16 @@ export default function UploadWorkspace({
       return;
     }
 
+    // Pre-flight validation
+    if (workspace.cv.status === 'empty') {
+      setApiError('No CV uploaded. Upload a CV before running analysis.');
+      return;
+    }
+    if (!workspace.jds.some((j) => j.status === 'indexed')) {
+      setApiError('No job descriptions indexed. Upload at least one JD before running analysis.');
+      return;
+    }
+
     setIsAnalysing(true);
     setApiError(null);
     try {
@@ -191,7 +281,14 @@ export default function UploadWorkspace({
       if (result.success) {
         onNavigate('results');
       } else {
-        setApiError(`Analysis failed: ${result.error.message}`);
+        const code = result.error.code;
+        if (code === 'MISSING_RESUME') {
+          setApiError('No indexed CV found in this workspace. Please upload your CV first.');
+        } else if (code === 'MISSING_JOB_DESCRIPTION') {
+          setApiError('No indexed job descriptions found. Upload at least one JD before analysing.');
+        } else {
+          setApiError(`Analysis failed: ${result.error.message}`);
+        }
       }
     } catch (e) {
       setApiError(`Analysis unavailable: ${e instanceof Error ? e.message : 'Network error'}`);
@@ -209,6 +306,8 @@ export default function UploadWorkspace({
       if (result.success) {
         setLocalSessionId(null);
         setWorkspace(cloneWorkspace(emptyWorkspace));
+        setBackendJdIndices([]);
+        hydratedForSession.current = null;
         setShowDeleteConfirm(false);
         onSessionReady?.('');
         onNavigate('landing');
@@ -253,11 +352,16 @@ export default function UploadWorkspace({
                 )}
               </p>
               <h1 className="text-2xl font-bold text-[#111111] mb-1">
-                Create your role intelligence workspace
+                {activeSessionId
+                  ? 'Add job descriptions to your workspace'
+                  : 'Create your role intelligence workspace'}
               </h1>
               <p className="text-sm text-[#6B6862] max-w-xl">
-                Add one CV and up to three job descriptions. RoleFit IQ will turn them into an
-                explainable fit analysis.
+                {activeSessionId
+                  ? jdLimitReached
+                    ? 'You have reached the maximum of 3 job descriptions. Run analysis or start a new workspace.'
+                    : `Your CV is loaded. Add up to ${jdSlotsAvailable} more job description${jdSlotsAvailable !== 1 ? 's' : ''} then run analysis.`
+                  : 'Add one CV and up to three job descriptions. RoleFit IQ will turn them into an explainable fit analysis.'}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -287,11 +391,20 @@ export default function UploadWorkspace({
 
       <RetroColorBars height="h-1.5" />
 
+      {isLoadingSession && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="bg-white border border-[#DDD8CE] rounded-sm px-4 py-3 flex items-center gap-3">
+            <Loader2 className="w-4 h-4 text-[#9A958F] animate-spin" aria-hidden="true" />
+            <p className="font-mono text-[10px] text-[#6B6862] uppercase tracking-widest">Loading workspace state…</p>
+          </div>
+        </div>
+      )}
+
       {apiError && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
           <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm px-4 py-3 flex items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-[10px] text-[#92600A] uppercase tracking-widest mb-0.5">Error</p>
+              <p className="font-mono text-[10px] text-[#92600A] uppercase tracking-widest mb-0.5">Notice</p>
               <p className="text-xs text-[#92600A]">{apiError}</p>
             </div>
             <button
@@ -373,6 +486,18 @@ export default function UploadWorkspace({
         </div>
       )}
 
+      {/* JD limit reached banner */}
+      {jdLimitReached && activeSessionId && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="bg-[#F5F5F5] border border-[#DDD8CE] rounded-sm px-4 py-3">
+            <p className="font-mono text-[10px] text-[#6B6862] uppercase tracking-widest mb-0.5">Maximum JDs reached</p>
+            <p className="text-xs text-[#6B6862]">
+              This workspace has 3 job descriptions. Run analysis below or go back to results.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Delete confirmation */}
       {showDeleteConfirm && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
@@ -410,7 +535,7 @@ export default function UploadWorkspace({
               { label: 'Documents',       value: `${indexedCount} / 4` },
               { label: 'Evidence chunks', value: totalChunks > 0 ? String(totalChunks) : '—' },
               { label: 'CV',  value: workspace.cv.status === 'indexed' ? 'indexed' : 'pending' },
-              { label: 'JDs', value: `${workspace.jds.filter((j) => j.status !== 'empty').length} of 3` },
+              { label: 'JDs', value: `${backendJdCount || workspace.jds.filter((j) => j.status !== 'empty').length} of 3` },
               { label: 'Backend', value: activeSessionId ? 'connected' : 'mock' },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2 flex-shrink-0">
@@ -441,15 +566,27 @@ export default function UploadWorkspace({
             onRealUpload={handleRealUpload}
             isIndexing={indexingSlotId === workspace.cv.id}
           />
-          {workspace.jds.map((jd) => (
-            <UploadCard
-              key={jd.id}
-              slot={jd}
-              onStatusChange={handleSlotChange}
-              onRealUpload={handleRealUpload}
-              isIndexing={indexingSlotId === jd.id}
-            />
-          ))}
+          {workspace.jds.map((jd, i) => {
+            // In a real session, a slot is "locked" if its 1-based index is already occupied
+            // and the slot isn't currently indexed locally (meaning it's a different JD).
+            // For new sessions, all slots are available.
+            const slotJobIndex = i + 1;
+            const isOccupiedByBackend = backendJdIndices.includes(slotJobIndex);
+            const isLocallyIndexed = jd.status === 'indexed';
+            // Disable upload if limit reached and this slot isn't already showing an indexed doc
+            const uploadDisabled = jdLimitReached && !isLocallyIndexed && !isOccupiedByBackend;
+
+            return (
+              <UploadCard
+                key={jd.id}
+                slot={jd}
+                onStatusChange={handleSlotChange}
+                onRealUpload={handleRealUpload}
+                isIndexing={indexingSlotId === jd.id}
+                disabled={uploadDisabled}
+              />
+            );
+          })}
         </div>
 
         <div className="mt-6 bg-white border border-[#DDD8CE] rounded-sm p-4 flex gap-3">

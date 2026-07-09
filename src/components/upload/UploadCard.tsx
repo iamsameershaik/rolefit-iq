@@ -10,6 +10,7 @@ interface UploadCardProps {
   onStatusChange: (id: string, updates: Partial<DocumentSlot>) => void;
   onRealUpload?: (slot: DocumentSlot, rawText: string) => void;
   isIndexing?: boolean;
+  disabled?: boolean;
 }
 
 function statusBadgeVariant(status: DocumentStatus) {
@@ -36,7 +37,7 @@ async function readFileAsText(file: File): Promise<{ text: string; warning?: str
   };
 }
 
-export default function UploadCard({ slot, onStatusChange, onRealUpload, isIndexing = false }: UploadCardProps) {
+export default function UploadCard({ slot, onStatusChange, onRealUpload, isIndexing = false, disabled = false }: UploadCardProps) {
   const [dragOver, setDragOver] = useState(false);
   const [pasteText, setPasteText] = useState(slot.pasteText || '');
   const [parseWarning, setParseWarning] = useState<string | null>(null);
@@ -103,9 +104,11 @@ export default function UploadCard({ slot, onStatusChange, onRealUpload, isIndex
     <div
       className={[
         'border rounded-sm bg-white transition-all duration-200 overflow-hidden',
+        disabled ? 'opacity-50 pointer-events-none' : '',
         dragOver ? 'border-[#111111] shadow-sm' : 'border-[#DDD8CE]',
       ].join(' ')}
       onDragOver={(e) => {
+        if (disabled) return;
         e.preventDefault();
         setDragOver(true);
       }}

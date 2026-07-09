@@ -7,6 +7,8 @@ import type { Page } from '../../types';
 interface TopNavProps {
   currentPage: Page;
   onNavigate: (page: Page) => void;
+  hasSession?: boolean;
+  onNewWorkspace?: () => void;
 }
 
 const navLinks = [
@@ -16,8 +18,9 @@ const navLinks = [
   { label: 'Demo', href: '#demo' },
 ];
 
-export default function TopNav({ currentPage, onNavigate }: TopNavProps) {
+export default function TopNav({ currentPage, onNavigate, hasSession, onNewWorkspace }: TopNavProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const inSession = hasSession && (currentPage === 'results' || currentPage === 'jd-detail' || currentPage === 'upload');
 
   return (
     <header className="sticky top-0 z-50 bg-[#F4F1EA]/95 backdrop-blur-sm border-b border-[#DDD8CE]">
@@ -53,9 +56,9 @@ export default function TopNav({ currentPage, onNavigate }: TopNavProps) {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => onNavigate('upload')}
+              onClick={() => inSession && onNewWorkspace ? onNewWorkspace() : onNavigate('upload')}
             >
-              Start analysis
+              {inSession ? 'New workspace' : 'Start analysis'}
             </Button>
           </div>
 
@@ -90,10 +93,10 @@ export default function TopNav({ currentPage, onNavigate }: TopNavProps) {
             size="sm"
             onClick={() => {
               setMenuOpen(false);
-              onNavigate('upload');
+              if (inSession && onNewWorkspace) { onNewWorkspace(); } else { onNavigate('upload'); }
             }}
           >
-            Start analysis
+            {inSession ? 'New workspace' : 'Start analysis'}
           </Button>
         </div>
       )}

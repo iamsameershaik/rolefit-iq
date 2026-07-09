@@ -6,12 +6,14 @@ interface AppShellProps {
   children: ReactNode;
   currentPage: Page;
   onNavigate: (page: Page) => void;
+  hasSession?: boolean;
+  onNewWorkspace?: () => void;
 }
 
-export default function AppShell({ children, currentPage, onNavigate }: AppShellProps) {
+export default function AppShell({ children, currentPage, onNavigate, hasSession, onNewWorkspace }: AppShellProps) {
   return (
     <div className="min-h-screen bg-[#F4F1EA] text-[#111111]">
-      <TopNav currentPage={currentPage} onNavigate={onNavigate} />
+      <TopNav currentPage={currentPage} onNavigate={onNavigate} hasSession={hasSession} onNewWorkspace={onNewWorkspace} />
       <main>{children}</main>
     </div>
   );

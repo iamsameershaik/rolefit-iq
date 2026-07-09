@@ -26,7 +26,12 @@ export default function App() {
     : undefined;
 
   return (
-    <AppShell currentPage={page} onNavigate={(p) => navigate(p)}>
+    <AppShell
+      currentPage={page}
+      onNavigate={(p) => navigate(p)}
+      hasSession={!!sessionId}
+      onNewWorkspace={() => { setSessionId(null); navigate('upload'); }}
+    >
       {page === 'landing' && (
         <LandingPage onNavigate={(p) => navigate(p)} />
       )}

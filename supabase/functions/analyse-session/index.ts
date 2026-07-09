@@ -75,11 +75,11 @@ Deno.serve(async (req: Request) => {
     );
 
     if (cvDocs.length === 0) {
-      return err("PRECONDITION_FAILED",
+      return err("MISSING_RESUME",
         "No indexed CV found in this session. Upload a CV first.", 400);
     }
     if (jdDocs.length === 0) {
-      return err("PRECONDITION_FAILED",
+      return err("MISSING_JOB_DESCRIPTION",
         "No indexed job descriptions found in this session. Upload at least one JD.", 400);
     }
 
@@ -92,7 +92,16 @@ Deno.serve(async (req: Request) => {
     });
 
     // ── Clear existing analyses (re-run support) ────────────────
-    await supabase.from("analyses").delete().eq("session_id", session_id);
+    // Only delete analyses for JDs that are being re-analysed (by job_document_id).
+    // This preserves analyses for any JDs not in the current indexed set.
+    const activeJdDocIds = jdDocs.map((d: { id: string }) => d.id);
+    if (activeJdDocIds.length > 0) {
+      await supabase
+        .from("analyses")
+        .delete()
+        .eq("session_id", session_id)
+        .in("job_document_id", activeJdDocIds);
+    }
 
     // ── Update session status ───────────────────────────────────
     await supabase
