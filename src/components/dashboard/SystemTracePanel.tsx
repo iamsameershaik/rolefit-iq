@@ -7,6 +7,7 @@ interface Props {
   sessionId?: string;
   sessionStatus?: string;
   jdCount?: number;
+  analysesCount?: number;
 }
 
 export default function SystemTracePanel({
@@ -16,6 +17,7 @@ export default function SystemTracePanel({
   sessionId,
   sessionStatus,
   jdCount,
+  analysesCount,
 }: Props) {
   const rows = [
     {
@@ -27,12 +29,16 @@ export default function SystemTracePanel({
       value: evidenceChunks > 0 ? String(evidenceChunks) : '—',
     },
     ...(isRealMode && jdCount !== undefined ? [{
-      label: 'JDs analysed',
+      label: 'Job descriptions',
       value: String(jdCount),
+    }] : []),
+    ...(isRealMode && analysesCount !== undefined ? [{
+      label: 'Analyses generated',
+      value: String(analysesCount),
     }] : []),
     {
       label: 'Retrieval mode',
-      value: isRealMode ? 'Supabase pgvector' : 'Mock demo workspace',
+      value: isRealMode ? 'Supabase pgvector' : 'Mocked vector retrieval',
     },
     {
       label: 'Assistant status',
@@ -54,7 +60,9 @@ export default function SystemTracePanel({
         <span className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862]">
           System trace · RFQ-TRACE-01
         </span>
-        <Badge variant={isRealMode ? 'indexed' : 'muted'}>{isRealMode ? 'live' : 'demo'}</Badge>
+        <Badge variant={isRealMode ? 'indexed' : 'muted'}>
+          {isRealMode ? 'real session' : 'demo mode'}
+        </Badge>
       </div>
       <div className="p-5 space-y-3">
         {isRealMode && sessionId && (

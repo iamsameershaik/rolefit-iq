@@ -35,7 +35,7 @@ export default function App() {
           key={loadSample ? 'sample' : 'empty'}
           onNavigate={(p) => navigate(p)}
           initialWorkspace={uploadWorkspaceInitial}
-          onSessionReady={(id) => setSessionId(id)}
+          onSessionReady={(id) => setSessionId(id || null)}
           sessionId={sessionId}
         />
       )}

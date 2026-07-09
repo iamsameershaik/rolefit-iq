@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Upload, FileText, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { Upload, FileText, Check, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import type { DocumentSlot, DocumentStatus } from '../../types';
 import Badge from '../shared/Badge';
 import Button from '../shared/Button';
@@ -10,6 +10,8 @@ interface UploadCardProps {
   onStatusChange: (id: string, updates: Partial<DocumentSlot>) => void;
   /** Optional real upload handler — called after mock state is updated. */
   onRealUpload?: (slot: DocumentSlot, rawText: string) => void;
+  /** Whether this specific card is currently being indexed (chunking + embedding). */
+  isIndexing?: boolean;
 }
 
 function statusBadgeVariant(status: DocumentStatus) {
@@ -45,7 +47,7 @@ function getMockFileName(type: 'cv' | 'jd', id: string): string {
   return names[idx % names.length] || names[0];
 }
 
-export default function UploadCard({ slot, onStatusChange, onRealUpload }: UploadCardProps) {
+export default function UploadCard({ slot, onStatusChange, onRealUpload, isIndexing = false }: UploadCardProps) {
   const [dragOver, setDragOver] = useState(false);
   const [pasteText, setPasteText] = useState(slot.pasteText || '');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -123,9 +125,13 @@ export default function UploadCard({ slot, onStatusChange, onRealUpload }: Uploa
       }}
     >
       <div className="p-5">
-        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
-            {isUploaded ? (
+            {isIndexing ? (
+              <div className="w-5 h-5 rounded-sm border border-[#DDD8CE] flex items-center justify-center flex-shrink-0">
+                <Loader2 className="w-3 h-3 text-[#6B6862] animate-spin" aria-hidden="true" />
+              </div>
+            ) : isUploaded ? (
               <div className="w-5 h-5 rounded-sm bg-[#111111] flex items-center justify-center flex-shrink-0">
                 <Check className="w-3 h-3 text-white" />
               </div>
@@ -138,7 +144,13 @@ export default function UploadCard({ slot, onStatusChange, onRealUpload }: Uploa
               {slot.id}
             </span>
           </div>
-          <Badge variant={statusBadgeVariant(slot.status)}>{statusLabel(slot.status)}</Badge>
+          {isIndexing ? (
+            <span className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862] border border-[#DDD8CE] px-2 py-0.5 rounded-sm bg-[#F4F1EA]">
+              indexing…
+            </span>
+          ) : (
+            <Badge variant={statusBadgeVariant(slot.status)}>{statusLabel(slot.status)}</Badge>
+          )}
         </div>
 
         <h3 className="text-sm font-semibold text-[#111111] mb-1">{slot.title}</h3>

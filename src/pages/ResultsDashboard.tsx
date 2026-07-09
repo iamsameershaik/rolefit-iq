@@ -197,7 +197,7 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
             <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-3">
               Grounded assistant · available on indexed documents
             </p>
-            <AssistantPanel sessionId={sessionId} />
+            <AssistantPanel sessionId={sessionId} jdCount={jdCount} />
           </div>
         </div>
       )}
@@ -219,6 +219,7 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
                 sessionId={sessionId ?? undefined}
                 sessionStatus={sessionStatus ?? undefined}
                 jdCount={isRealMode ? jdCount : undefined}
+                analysesCount={isRealMode ? (realAnalyses?.length ?? 0) : undefined}
               />
             </div>
           </div>
@@ -276,7 +277,7 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
             <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-3">
               {isRealMode ? '05' : '06'} · Grounded assistant
             </p>
-            <AssistantPanel sessionId={sessionId} />
+            <AssistantPanel sessionId={sessionId} jdCount={isRealMode ? jdCount : undefined} />
           </div>
 
           <div className="border-t border-[#DDD8CE] pt-4 flex flex-wrap gap-3">

@@ -6,7 +6,7 @@ import ProcessingPipeline from '../components/upload/ProcessingPipeline';
 import RetroColorBars from '../components/brand/RetroColorBars';
 import type { DocumentSlot, Page, WorkspaceState } from '../types';
 import { emptyWorkspace, sampleWorkspace } from '../data/mockData';
-import { createSession, uploadDocument, analyseSession } from '../lib/apiClient';
+import { createSession, uploadDocument, analyseSession, deleteSession } from '../lib/apiClient';
 
 interface UploadWorkspaceProps {
   onNavigate: (page: Page) => void;
@@ -38,6 +38,8 @@ export default function UploadWorkspace({
   const [apiError, setApiError]             = useState<string | null>(null);
   const [indexingSlotId, setIndexingSlotId] = useState<string | null>(null);
   const [isAnalysing, setIsAnalysing]       = useState(false);
+  const [isDeleting, setIsDeleting]         = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const activeSessionId = localSessionId ?? externalSessionId ?? null;
 
@@ -138,6 +140,30 @@ export default function UploadWorkspace({
     }
   }
 
+  async function handleDelete() {
+    if (!activeSessionId) return;
+    setIsDeleting(true);
+    setApiError(null);
+    try {
+      const result = await deleteSession(activeSessionId);
+      if (result.success) {
+        setLocalSessionId(null);
+        setWorkspace(cloneWorkspace(emptyWorkspace));
+        setShowDeleteConfirm(false);
+        onSessionReady?.('');   // signal App to clear sessionId
+        onNavigate('landing');
+      } else {
+        setApiError(`Could not delete workspace: ${result.error.message}`);
+        setShowDeleteConfirm(false);
+      }
+    } catch (e) {
+      setApiError(`Could not delete workspace: ${e instanceof Error ? e.message : 'Network error'}`);
+      setShowDeleteConfirm(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   const totalChunks  = allSlots.reduce((sum, s) => sum + (s.chunkCount ?? 0), 0);
   const activeStage  =
     indexedCount === 0 ? null
@@ -162,9 +188,13 @@ export default function UploadWorkspace({
             <div>
               <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862] mb-1">
                 {activeSessionId ? (
-                  <span>workspace · <span className="text-[#1A7A41]">{activeSessionId.slice(0, 8)}</span></span>
+                  <span>
+                    workspace · <span className="text-[#1A7A41]">{activeSessionId.slice(0, 8)}</span>
+                    {' · '}
+                    <span className="text-[#1A7A41]">real session</span>
+                  </span>
                 ) : (
-                  'workspace-01 · mock mode'
+                  'workspace · demo mode'
                 )}
               </p>
               <h1 className="text-2xl font-bold text-[#111111] mb-1">
@@ -176,9 +206,21 @@ export default function UploadWorkspace({
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <Button variant="ghost" size="sm" onClick={loadSample}>
-                Load sample workspace
-              </Button>
+              {activeSessionId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="text-[#9A958F] hover:text-[#D42E3A] hover:border-[#D42E3A]"
+                >
+                  Delete workspace
+                </Button>
+              )}
+              {!activeSessionId && (
+                <Button variant="ghost" size="sm" onClick={loadSample}>
+                  Load sample workspace
+                </Button>
+              )}
             </div>
           </div>
 
@@ -192,15 +234,47 @@ export default function UploadWorkspace({
 
       {apiError && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-          <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm px-4 py-2 flex items-center justify-between gap-4">
-            <p className="font-mono text-[10px] text-[#92600A] uppercase tracking-widest">{apiError}</p>
+          <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm px-4 py-3 flex items-start justify-between gap-4">
+            <div>
+              <p className="font-mono text-[10px] text-[#92600A] uppercase tracking-widest mb-0.5">Error</p>
+              <p className="text-xs text-[#92600A]">{apiError}</p>
+            </div>
             <button
               onClick={() => setApiError(null)}
-              className="font-mono text-[10px] text-[#9A958F] hover:text-[#111111] uppercase tracking-widest focus-visible:outline-none"
-              aria-label="Dismiss notice"
+              className="font-mono text-[10px] text-[#9A958F] hover:text-[#111111] uppercase tracking-widest focus-visible:outline-none flex-shrink-0"
+              aria-label="Dismiss"
             >
               dismiss
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      {showDeleteConfirm && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="bg-[#FEF0EF] border border-[#F8C2BE] rounded-sm px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[10px] text-[#D42E3A] uppercase tracking-widest mb-0.5">Confirm deletion</p>
+              <p className="text-xs text-[#6B6862]">
+                This will soft-delete the workspace and all indexed documents. This action cannot be undone from the UI.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="font-mono text-[10px] text-[#9A958F] hover:text-[#111111] uppercase tracking-widest focus-visible:outline-none"
+              >
+                cancel
+              </button>
+              <button
+                onClick={() => void handleDelete()}
+                disabled={isDeleting}
+                className="font-mono text-[10px] text-[#D42E3A] border border-[#F8C2BE] hover:border-[#D42E3A] uppercase tracking-widest px-3 py-1.5 rounded-sm transition-colors disabled:opacity-40 focus-visible:outline-none"
+              >
+                {isDeleting ? 'Deleting…' : 'Delete workspace'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -226,7 +300,9 @@ export default function UploadWorkspace({
             {indexingSlotId && (
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <Loader2 className="w-3 h-3 text-[#6B6862] animate-spin" aria-hidden="true" />
-                <span className="font-mono text-[10px] text-[#6B6862] uppercase tracking-widest">embedding…</span>
+                <span className="font-mono text-[10px] text-[#6B6862] uppercase tracking-widest">
+                  chunking · embedding…
+                </span>
               </div>
             )}
           </div>
@@ -236,9 +312,20 @@ export default function UploadWorkspace({
       {/* Upload grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
-          <UploadCard slot={workspace.cv} onStatusChange={handleSlotChange} onRealUpload={handleRealUpload} />
+          <UploadCard
+            slot={workspace.cv}
+            onStatusChange={handleSlotChange}
+            onRealUpload={handleRealUpload}
+            isIndexing={indexingSlotId === workspace.cv.id}
+          />
           {workspace.jds.map((jd) => (
-            <UploadCard key={jd.id} slot={jd} onStatusChange={handleSlotChange} onRealUpload={handleRealUpload} />
+            <UploadCard
+              key={jd.id}
+              slot={jd}
+              onStatusChange={handleSlotChange}
+              onRealUpload={handleRealUpload}
+              isIndexing={indexingSlotId === jd.id}
+            />
           ))}
         </div>
 
