@@ -343,6 +343,7 @@ export class OpenAIProvider implements AIProvider {
         professional_summary: typeof rewriteRaw.professional_summary === "string" ? rewriteRaw.professional_summary : "",
         bullet_improvements:  Array.isArray(rewriteRaw.bullet_improvements)  ? rewriteRaw.bullet_improvements  : [],
         keyword_suggestions:  Array.isArray(rewriteRaw.keyword_suggestions)  ? rewriteRaw.keyword_suggestions  : [],
+        preparation_gaps:     Array.isArray(rewriteRaw.preparation_gaps)     ? rewriteRaw.preparation_gaps     : [],
         do_not_claim:         Array.isArray(rewriteRaw.do_not_claim)         ? rewriteRaw.do_not_claim         : [],
       },
       evidence: Array.isArray(raw.evidence) ? raw.evidence : [],

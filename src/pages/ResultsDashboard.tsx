@@ -13,8 +13,9 @@ import SystemTracePanel from '../components/dashboard/SystemTracePanel';
 import AssistantPanel from '../components/chat/AssistantPanel';
 import { candidateProfile, jdAnalyses, roleFitMatrix } from '../data/mockData';
 import { getSession } from '../lib/apiClient';
+import type { DocumentData } from '../lib/apiClient';
 import { mapAnalysesArray } from '../lib/analysisMapper';
-import type { Page, JDAnalysis, Strength, SkillGap, RiskFlag, InterviewQuestion } from '../types';
+import type { Page, JDAnalysis, Strength, SkillGap, RiskFlag, InterviewQuestion, CandidateProfile } from '../types';
 
 interface Props {
   onNavigate: (page: Page, jdId?: string) => void;
@@ -50,17 +51,33 @@ function buildConsolidated(analyses: JDAnalysis[]) {
   return { strengths, uniqueGaps, uniqueFlags, questions };
 }
 
+function buildCandidateProfile(resumeDoc: DocumentData | undefined, totalChunks: number): CandidateProfile {
+  const meta = (resumeDoc?.metadata ?? {}) as Record<string, unknown>;
+  const themes = Array.isArray(meta.experience_themes) ? (meta.experience_themes as string[]) : [];
+  const skills = Array.isArray(meta.top_skills) ? (meta.top_skills as string[]) : [];
+  const primaryThemes = themes.length > 0 ? themes : skills.slice(0, 5);
+  return {
+    name:                (meta.candidate_name as string | undefined) ?? 'Candidate profile',
+    positioning:         (meta.headline as string | undefined) ?? (meta.recent_role_title as string | undefined) ?? 'Uploaded CV indexed',
+    location:            (meta.location as string | undefined) ?? 'Location not detected',
+    roleSignalsDetected: primaryThemes.length,
+    cvChunksIndexed:     resumeDoc?.chunk_count ?? 0,
+    primaryThemes,
+    evidenceChunks:      totalChunks,
+  };
+}
+
 export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
-  // isRealMode is true whenever a live session ID exists — separates real from demo.
   const isRealMode = !!sessionId;
 
-  const [realAnalyses, setRealAnalyses]   = useState<JDAnalysis[] | null>(null);
-  const [totalChunks, setTotalChunks]     = useState(0);
-  const [docCount, setDocCount]           = useState(0);
-  const [jdCount, setJdCount]             = useState(0);
-  const [loading, setLoading]             = useState(false);
-  const [loadError, setLoadError]         = useState<string | null>(null);
-  const [sessionStatus, setSessionStatus] = useState<string | null>(null);
+  const [realAnalyses, setRealAnalyses]       = useState<JDAnalysis[] | null>(null);
+  const [totalChunks, setTotalChunks]         = useState(0);
+  const [docCount, setDocCount]               = useState(0);
+  const [jdCount, setJdCount]                 = useState(0);
+  const [loading, setLoading]                 = useState(false);
+  const [loadError, setLoadError]             = useState<string | null>(null);
+  const [sessionStatus, setSessionStatus]     = useState<string | null>(null);
+  const [resumeDoc, setResumeDoc]             = useState<DocumentData | undefined>(undefined);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -71,14 +88,20 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
         if (result.success) {
           const docs = result.data.documents ?? [];
           const jds  = docs.filter((d) => d.document_type === 'job_description');
+          const cv   = docs.find((d) => d.document_type === 'resume');
           setDocCount(docs.length);
           setJdCount(jds.length);
           setTotalChunks(result.data.total_chunks);
           setSessionStatus(result.data.session.status);
+          setResumeDoc(cv);
+
           if (result.data.analyses.length > 0) {
-            setRealAnalyses(mapAnalysesArray(result.data.analyses));
+            const docsByJobIndex: Record<number, DocumentData> = {};
+            for (const jd of jds) {
+              if (jd.job_index !== null) docsByJobIndex[jd.job_index] = jd;
+            }
+            setRealAnalyses(mapAnalysesArray(result.data.analyses, docsByJobIndex));
           } else {
-            // Explicitly mark that we loaded but found no analyses
             setRealAnalyses([]);
           }
         } else {
@@ -89,18 +112,20 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
       .finally(() => setLoading(false));
   }, [sessionId]);
 
-  // Real mode: only show real analyses — never fall back to mock JDs.
-  // Demo mode: always show mock data.
-  const hasRealAnalyses   = isRealMode && realAnalyses !== null && realAnalyses.length > 0;
-  const displayAnalyses   = hasRealAnalyses ? realAnalyses! : (isRealMode ? [] : jdAnalyses);
+  const hasRealAnalyses    = isRealMode && realAnalyses !== null && realAnalyses.length > 0;
+  const displayAnalyses    = hasRealAnalyses ? realAnalyses! : (isRealMode ? [] : jdAnalyses);
   const showEmptyRealState = isRealMode && !loading && realAnalyses !== null && realAnalyses.length === 0;
   const showFullDashboard  = hasRealAnalyses || !isRealMode;
 
   const { strengths, uniqueGaps, uniqueFlags, questions } = buildConsolidated(
     showFullDashboard ? displayAnalyses : []
   );
-  const evidenceChunks = isRealMode ? totalChunks : candidateProfile.evidenceChunks;
-  const docsIndexed    = isRealMode ? docCount : 4;
+
+  const displayCandidate = isRealMode
+    ? buildCandidateProfile(resumeDoc, totalChunks)
+    : candidateProfile;
+
+  const docsIndexed = isRealMode ? docCount : 4;
 
   return (
     <div className="bg-[#F4F1EA] min-h-screen">
@@ -135,7 +160,6 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
 
       <RetroColorBars height="h-1.5" />
 
-      {/* Loading banner */}
       {loading && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
           <div className="bg-white border border-[#DDD8CE] rounded-sm px-4 py-2 flex items-center gap-3">
@@ -147,7 +171,6 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
         </div>
       )}
 
-      {/* Load error banner */}
       {loadError && !loading && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
           <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm px-4 py-2 flex items-center gap-3">
@@ -159,7 +182,6 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
         </div>
       )}
 
-      {/* Real session with no analyses yet */}
       {showEmptyRealState && !loadError && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
           <div className="bg-white border border-[#DDD8CE] rounded-sm p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -192,7 +214,6 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
             </button>
           </div>
 
-          {/* Grounded assistant is available even without full analysis */}
           <div>
             <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-3">
               Grounded assistant · available on indexed documents
@@ -202,7 +223,6 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
         </div>
       )}
 
-      {/* Full dashboard — real analyses or demo mode */}
       {showFullDashboard && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
@@ -210,11 +230,11 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
             <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-3">01 · Candidate + system</p>
             <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
               <div className="xl:col-span-2">
-                <CandidateSummaryCard candidate={candidateProfile} />
+                <CandidateSummaryCard candidate={displayCandidate} />
               </div>
               <SystemTracePanel
                 documentsIndexed={docsIndexed}
-                evidenceChunks={evidenceChunks}
+                evidenceChunks={isRealMode ? totalChunks : candidateProfile.evidenceChunks}
                 isRealMode={isRealMode}
                 sessionId={sessionId ?? undefined}
                 sessionStatus={sessionStatus ?? undefined}
@@ -234,6 +254,7 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
                   index={i + 1}
                   title={jd.title}
                   company={jd.company}
+                  location={jd.location}
                   fitTier={jd.fitTier}
                   explainableFitEstimate={jd.explainableFitEstimate}
                   evidenceStrength={jd.evidenceStrength}
@@ -246,7 +267,6 @@ export default function ResultsDashboard({ onNavigate, sessionId }: Props) {
             </div>
           </div>
 
-          {/* Evidence matrix: only meaningful for demo (real version needs per-JD matrix) */}
           {!isRealMode && (
             <div>
               <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-3">03 · Evidence signal matrix</p>

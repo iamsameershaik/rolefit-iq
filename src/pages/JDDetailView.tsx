@@ -8,6 +8,7 @@ import Badge from '../components/shared/Badge';
 import type { Page, JDAnalysis } from '../types';
 import { jdAnalyses } from '../data/mockData';
 import { getSession } from '../lib/apiClient';
+import type { DocumentData } from '../lib/apiClient';
 import { mapAnalysesArray } from '../lib/analysisMapper';
 
 type Tab = 'overview' | 'evidence' | 'gaps' | 'interview' | 'rewrite';
@@ -32,7 +33,13 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId }: Pro
     getSession(sessionId)
       .then((result) => {
         if (result.success && result.data.analyses.length > 0) {
-          setRealAnalyses(mapAnalysesArray(result.data.analyses));
+          const docs = result.data.documents ?? [];
+          const jds  = docs.filter((d: DocumentData) => d.document_type === 'job_description');
+          const docsByJobIndex: Record<number, DocumentData> = {};
+          for (const jd of jds) {
+            if (jd.job_index !== null) docsByJobIndex[jd.job_index] = jd;
+          }
+          setRealAnalyses(mapAnalysesArray(result.data.analyses, docsByJobIndex));
         } else if (result.success) {
           setRealAnalyses([]);
         } else {
@@ -298,6 +305,14 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId }: Pro
                           <p className="text-sm font-semibold text-[#111111]">{q.question}</p>
                         </div>
                         <div className="space-y-3 pl-7">
+                          {q.whyThisWillBeAsked && (
+                            <div>
+                              <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-1">
+                                Why this will be asked
+                              </p>
+                              <p className="text-xs text-[#6B6862] leading-relaxed">{q.whyThisWillBeAsked}</p>
+                            </div>
+                          )}
                           <div>
                             <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-1">
                               Answer angle
@@ -380,6 +395,22 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId }: Pro
                         ))}
                       </ul>
                     </div>
+
+                    {(analysis.rewriteRecommendation.preparationGaps ?? []).length > 0 && (
+                      <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm p-4">
+                        <p className="font-mono text-[10px] uppercase tracking-widest text-[#92600A] mb-2">
+                          Preparation gaps
+                        </p>
+                        <ul className="space-y-1.5">
+                          {(analysis.rewriteRecommendation.preparationGaps ?? []).map((g, i) => (
+                            <li key={i} className="text-xs text-[#6B6862] leading-relaxed flex gap-2">
+                              <span className="text-[#92600A] flex-shrink-0">→</span>
+                              {g}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
                     <p className="font-mono text-[10px] text-[#9A958F] border-t border-[#DDD8CE] pt-3">
                       These recommendations should only strengthen evidence already present in the CV. They should not invent experience.

@@ -7,6 +7,7 @@ interface Props {
   index: number;
   title: string;
   company: string;
+  location?: string;
   fitTier: FitTier;
   explainableFitEstimate: number;
   evidenceStrength: EvidenceStrength;
@@ -45,6 +46,7 @@ export default function JDSummaryCard({
   index,
   title,
   company,
+  location,
   fitTier,
   explainableFitEstimate,
   evidenceStrength,
@@ -67,7 +69,11 @@ export default function JDSummaryCard({
       <div className="p-4 flex-1">
         <p className="font-mono text-[10px] text-[#9A958F] mb-0.5">JD {index}</p>
         <h3 className="text-sm font-bold text-[#111111] mb-0.5">{title}</h3>
-        <p className="text-xs text-[#6B6862] mb-4">{company}</p>
+        {(company || location) && (
+          <p className="text-xs text-[#6B6862] mb-4">
+            {[company, location].filter(Boolean).join(' · ')}
+          </p>
+        )}
 
         {/* Fit score */}
         <div className="mb-4">

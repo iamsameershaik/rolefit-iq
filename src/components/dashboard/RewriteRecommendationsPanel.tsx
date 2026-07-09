@@ -87,6 +87,22 @@ export default function RewriteRecommendationsPanel({ jdAnalyses }: Props) {
             </ul>
           </div>
 
+          {(rec.preparationGaps ?? []).length > 0 && (
+            <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm p-3">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-[#92600A] mb-2">
+                Preparation gaps
+              </p>
+              <ul className="space-y-1.5">
+                {(rec.preparationGaps ?? []).map((g, i) => (
+                  <li key={i} className="text-xs text-[#6B6862] leading-relaxed flex gap-2">
+                    <span className="text-[#92600A] flex-shrink-0">→</span>
+                    {g}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <p className="font-mono text-[10px] text-[#9A958F] border-t border-[#DDD8CE] pt-3">
             These recommendations should only strengthen evidence already present in the CV. They should not invent experience.
           </p>

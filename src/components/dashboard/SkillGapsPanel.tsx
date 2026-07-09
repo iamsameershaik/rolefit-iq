@@ -25,6 +25,11 @@ export default function SkillGapsPanel({ gaps }: Props) {
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <span className="text-xs font-semibold text-[#111111]">{gap.skill}</span>
               <Badge variant={impactVariant(gap.impact)}>{gap.impact} impact</Badge>
+              {gap.gapType && (
+                <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-sm border border-[#DDD8CE] text-[#6B6862] bg-[#F4F1EA]">
+                  {gap.gapType}
+                </span>
+              )}
               {gap.relatedJDs.map((jd) => (
                 <Badge key={jd} variant="muted">{jd.toUpperCase()}</Badge>
               ))}

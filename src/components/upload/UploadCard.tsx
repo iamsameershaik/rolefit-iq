@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Upload, FileText, Check, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { Upload, FileText, Check, ChevronDown, ChevronUp, Loader2, AlertCircle } from 'lucide-react';
 import type { DocumentSlot, DocumentStatus } from '../../types';
 import Badge from '../shared/Badge';
 import Button from '../shared/Button';
@@ -8,9 +8,7 @@ import PasteTextPanel from './PasteTextPanel';
 interface UploadCardProps {
   slot: DocumentSlot;
   onStatusChange: (id: string, updates: Partial<DocumentSlot>) => void;
-  /** Optional real upload handler — called after mock state is updated. */
   onRealUpload?: (slot: DocumentSlot, rawText: string) => void;
-  /** Whether this specific card is currently being indexed (chunking + embedding). */
   isIndexing?: boolean;
 }
 
@@ -26,55 +24,50 @@ function statusLabel(status: DocumentStatus) {
   return 'empty';
 }
 
-const mockFileNames: Record<string, string[]> = {
-  cv: ['cv_2024.pdf', 'resume_final.pdf', 'john_doe_cv.docx'],
-  jd: [
-    'forward_deployed_engineer.pdf',
-    'ai_solutions_engineer.pdf',
-    'ai_automation_consultant.pdf',
-    'job_description.pdf',
-  ],
-};
-
-let jdNameIndex = 0;
-
-function getMockFileName(type: 'cv' | 'jd', id: string): string {
-  if (type === 'cv') {
-    return mockFileNames.cv[Math.floor(Math.random() * mockFileNames.cv.length)];
+async function readFileAsText(file: File): Promise<{ text: string; warning?: string }> {
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  if (ext === 'txt') {
+    const text = await file.text();
+    return { text };
   }
-  const names = mockFileNames.jd;
-  const idx = parseInt(id.slice(-2)) - 1;
-  return names[idx % names.length] || names[0];
+  return {
+    text: '',
+    warning: `We could not reliably extract text from "${file.name}" (${ext?.toUpperCase() ?? 'unknown'} format). Please paste the document text instead.`,
+  };
 }
 
 export default function UploadCard({ slot, onStatusChange, onRealUpload, isIndexing = false }: UploadCardProps) {
   const [dragOver, setDragOver] = useState(false);
   const [pasteText, setPasteText] = useState(slot.pasteText || '');
+  const [parseWarning, setParseWarning] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isUploaded = slot.status !== 'empty';
   const pasteOpen = slot.pasteOpen ?? false;
 
-  function handleMockUpload() {
-    const fileName = getMockFileName(slot.type, slot.id);
-    const charCount = slot.type === 'cv' ? 8420 : Math.floor(Math.random() * 2000) + 3000;
-    const chunkCount = slot.type === 'cv' ? 18 : Math.floor(Math.random() * 5) + 8;
+  async function handleFileSelected(file: File) {
+    setParseWarning(null);
+    const { text, warning } = await readFileAsText(file);
+    if (warning) {
+      setParseWarning(warning);
+      onStatusChange(slot.id, { pasteOpen: true });
+      return;
+    }
+    const charCount = text.length;
+    const chunkCount = Math.max(4, Math.floor(charCount / 400));
     const updates: Partial<DocumentSlot> = {
       status: 'indexed',
-      fileName,
+      fileName: file.name,
       charCount,
       chunkCount,
       pasteOpen: false,
     };
     onStatusChange(slot.id, updates);
-    // Attempt real backend upload with placeholder text (file parsing is Phase 2)
-    onRealUpload?.(
-      { ...slot, ...updates },
-      `[Mock upload — file parsing in Phase 2] Filename: ${fileName}`
-    );
+    onRealUpload?.({ ...slot, ...updates }, text);
   }
 
   function handlePasteConfirm() {
+    setParseWarning(null);
     const charCount = pasteText.length;
     const chunkCount = Math.max(4, Math.floor(charCount / 400));
     const updates: Partial<DocumentSlot> = {
@@ -86,12 +79,12 @@ export default function UploadCard({ slot, onStatusChange, onRealUpload, isIndex
       pasteOpen: false,
     };
     onStatusChange(slot.id, updates);
-    // Attempt real backend upload with the actual pasted text
     onRealUpload?.({ ...slot, ...updates }, pasteText);
   }
 
   function handleRemove() {
     setPasteText('');
+    setParseWarning(null);
     onStatusChange(slot.id, {
       status: 'empty',
       fileName: undefined,
@@ -111,7 +104,6 @@ export default function UploadCard({ slot, onStatusChange, onRealUpload, isIndex
       className={[
         'border rounded-sm bg-white transition-all duration-200 overflow-hidden',
         dragOver ? 'border-[#111111] shadow-sm' : 'border-[#DDD8CE]',
-        isUploaded ? 'border-[#DDD8CE]' : '',
       ].join(' ')}
       onDragOver={(e) => {
         e.preventDefault();
@@ -121,11 +113,12 @@ export default function UploadCard({ slot, onStatusChange, onRealUpload, isIndex
       onDrop={(e) => {
         e.preventDefault();
         setDragOver(false);
-        handleMockUpload();
+        const file = e.dataTransfer.files[0];
+        if (file) void handleFileSelected(file);
       }}
     >
       <div className="p-5">
-          <div className="flex items-start justify-between mb-3">
+        <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
             {isIndexing ? (
               <div className="w-5 h-5 rounded-sm border border-[#DDD8CE] flex items-center justify-center flex-shrink-0">
@@ -156,6 +149,13 @@ export default function UploadCard({ slot, onStatusChange, onRealUpload, isIndex
         <h3 className="text-sm font-semibold text-[#111111] mb-1">{slot.title}</h3>
         <p className="text-xs text-[#6B6862] leading-relaxed mb-4">{slot.description}</p>
 
+        {parseWarning && (
+          <div className="mb-3 bg-[#FFF8E7] border border-[#FADDAA] rounded-sm px-3 py-2 flex items-start gap-2">
+            <AlertCircle className="w-3.5 h-3.5 text-[#92600A] flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-xs text-[#92600A] leading-relaxed">{parseWarning}</p>
+          </div>
+        )}
+
         {!isUploaded ? (
           <div
             className={[
@@ -175,14 +175,18 @@ export default function UploadCard({ slot, onStatusChange, onRealUpload, isIndex
           >
             <Upload className="w-5 h-5 text-[#9A958F] mx-auto mb-2" aria-hidden="true" />
             <p className="text-xs text-[#6B6862] mb-1">Drag & drop or click to upload</p>
-            <p className="font-mono text-[10px] text-[#9A958F]">PDF · DOCX · TXT</p>
+            <p className="font-mono text-[10px] text-[#9A958F]">TXT supported · PDF/DOCX: paste text</p>
             <input
               ref={inputRef}
               type="file"
               accept=".pdf,.docx,.txt"
               className="sr-only"
               aria-label={`File input for ${slot.title}`}
-              onChange={handleMockUpload}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleFileSelected(file);
+                e.target.value = '';
+              }}
             />
           </div>
         ) : (
@@ -211,7 +215,7 @@ export default function UploadCard({ slot, onStatusChange, onRealUpload, isIndex
         <div className="flex items-center gap-2 mt-3">
           {!isUploaded && (
             <>
-              <Button variant="secondary" size="sm" onClick={handleMockUpload}>
+              <Button variant="secondary" size="sm" onClick={() => inputRef.current?.click()}>
                 <Upload className="w-3 h-3" aria-hidden="true" />
                 Upload file
               </Button>

@@ -13,6 +13,11 @@ import {
 import { DOCUMENT_STATUS, SESSION_STATUS, AI_EVENT_TYPE, LIMITS, EMBEDDING } from "../_shared/constants.ts";
 import { chunkDocument, estimateTokens } from "../_shared/chunking.ts";
 import { OpenAIProvider } from "../_shared/openaiProvider.ts";
+import {
+  extractResumeMetadata,
+  extractJDMetadata,
+  enrichMetadataWithOpenAI,
+} from "../_shared/documentMetadata.ts";
 
 const log = createLogger("upload-document");
 
@@ -45,7 +50,6 @@ Deno.serve(async (req: Request) => {
     const mime_type       = optionalString(body.mime_type, "mime_type");
     const text_char_count = raw_text.length;
 
-    // estimateTokens imported but used below — silence lint
     void estimateTokens;
 
     const supabase = createServiceClient();
@@ -62,21 +66,56 @@ Deno.serve(async (req: Request) => {
     if (sessionFetchError) return err("DB_ERROR", "Error fetching session", 500, sessionFetchError.message);
     if (!session)          return err("NOT_FOUND",  "Session not found or deleted", 404);
 
+    // ── Extract document metadata ───────────────────────────────
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    let metadata: Record<string, unknown> = {};
+    try {
+      if (document_type === "resume") {
+        let m = extractResumeMetadata(raw_text);
+        if (apiKey) {
+          m = await enrichMetadataWithOpenAI("resume", raw_text, m, { apiKey }) as typeof m;
+        }
+        metadata = m as Record<string, unknown>;
+      } else {
+        let m = extractJDMetadata(raw_text);
+        if (apiKey) {
+          m = await enrichMetadataWithOpenAI("job_description", raw_text, m, { apiKey }) as typeof m;
+        }
+        metadata = m as Record<string, unknown>;
+      }
+    } catch (metaErr) {
+      log.warn("Metadata extraction failed (non-fatal)", {
+        session_id,
+        metadata: { error: (metaErr as Error).message },
+      });
+    }
+
+    // Derive a better title from metadata if no explicit title was provided
+    let effectiveTitle = title;
+    if (!effectiveTitle) {
+      if (document_type === "resume" && metadata.candidate_name) {
+        effectiveTitle = String(metadata.candidate_name);
+      } else if (document_type === "job_description" && metadata.role_title) {
+        effectiveTitle = String(metadata.role_title);
+      }
+    }
+
     // ── Insert document (status = uploaded) ────────────────────
     const { data: document, error: docError } = await supabase
       .from("documents")
       .insert({
         session_id,
         document_type,
-        title,
+        title:           effectiveTitle,
         file_name,
         mime_type,
         raw_text,
         text_char_count,
-        status: DOCUMENT_STATUS.UPLOADED,
+        status:    DOCUMENT_STATUS.UPLOADED,
         job_index,
+        metadata,
       })
-      .select("id, session_id, created_at, document_type, title, file_name, text_char_count, status, job_index")
+      .select("id, session_id, created_at, document_type, title, file_name, text_char_count, status, job_index, metadata")
       .single();
 
     if (docError) {
@@ -151,7 +190,6 @@ Deno.serve(async (req: Request) => {
     });
 
     // ── Embeddings ──────────────────────────────────────────────
-    const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) {
       await supabase
         .from("documents")
@@ -178,8 +216,6 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    // Embed sequentially — reliable over concurrent for MVP, avoids rate-limit thrashing.
-    // Future: batch in groups of 10, or move to async queue for large documents.
     const embeddedChunks: Array<typeof chunks[number] & { embedding: number[] }> = [];
     try {
       for (const chunk of chunks) {
@@ -325,6 +361,7 @@ Deno.serve(async (req: Request) => {
         text_char_count: document.text_char_count,
         status:          DOCUMENT_STATUS.INDEXED,
         job_index:       document.job_index,
+        metadata:        document.metadata ?? {},
       },
       chunks_created:  embeddedChunks.length,
       token_estimate:  totalTokenEstimate,

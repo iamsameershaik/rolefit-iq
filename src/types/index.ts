@@ -39,13 +39,16 @@ export type EvidenceStrength = 'Strong' | 'Moderate' | 'Weak';
 export type RiskLevel = 'Low' | 'Medium' | 'High';
 export type PreparationPriority = 'Low' | 'Medium' | 'High';
 export type SkillSignal = 'strong' | 'moderate' | 'weak' | 'missing';
+export type EvidenceType = 'Direct' | 'Adjacent' | 'Transferable' | 'Missing';
+export type GapType = 'Missing' | 'Weakly evidenced' | 'Adjacent only';
 
 export interface EvidenceSnippetType {
   id: string;
   text: string;
-  source: string;   // e.g. "CV · Projects · Chunk 04"
+  source: string;
   sourceType: 'cv' | 'jd';
   relevance: string;
+  evidenceType?: EvidenceType;
 }
 
 export interface SkillGap {
@@ -54,6 +57,8 @@ export interface SkillGap {
   impact: 'High' | 'Medium' | 'Low';
   suggestedAction: string;
   relatedJDs: string[];
+  gapType?: GapType;
+  evidenceBasis?: string;
 }
 
 export interface RiskFlag {
@@ -61,6 +66,7 @@ export interface RiskFlag {
   explanation: string;
   severity: RiskLevel;
   relatedJDs: string[];
+  isRealGap?: boolean;
 }
 
 export interface Strength {
@@ -68,6 +74,8 @@ export interface Strength {
   explanation: string;
   evidenceStrength: EvidenceStrength;
   relatedJDs: string[];
+  evidenceType?: EvidenceType;
+  whyItMattersForRole?: string;
 }
 
 export interface InterviewQuestion {
@@ -75,6 +83,7 @@ export interface InterviewQuestion {
   answerAngle: string;
   evidenceToMention: string;
   riskToAvoid: string;
+  whyThisWillBeAsked?: string;
 }
 
 export interface RewriteRecommendation {
@@ -83,12 +92,14 @@ export interface RewriteRecommendation {
   bulletImprovements: string[];
   keywordSuggestions: string[];
   doNotClaim: string[];
+  preparationGaps?: string[];
 }
 
 export interface JDAnalysis {
   id: string;
   title: string;
   company: string;
+  location?: string;
   fitTier: FitTier;
   explainableFitEstimate: number;
   evidenceStrength: EvidenceStrength;

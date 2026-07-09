@@ -42,10 +42,10 @@ Deno.serve(async (req: Request) => {
     if (sessionError) return err("DB_ERROR", "Error fetching session", 500, sessionError.message);
     if (!session)     return err("NOT_FOUND", "Session not found or deleted", 404);
 
-    // Fetch documents — omit raw_text (reduces payload, keeps text server-side)
+    // Fetch documents — include metadata, omit raw_text (reduces payload)
     const { data: documents, error: docsError } = await supabase
       .from("documents")
-      .select("id, session_id, created_at, updated_at, document_type, title, file_name, mime_type, text_char_count, status, job_index, parse_warning, deleted_at")
+      .select("id, session_id, created_at, updated_at, document_type, title, file_name, mime_type, text_char_count, status, job_index, parse_warning, metadata, deleted_at")
       .eq("session_id", session_id)
       .is("deleted_at", null)
       .order("created_at", { ascending: true });
@@ -55,7 +55,6 @@ Deno.serve(async (req: Request) => {
     }
 
     // Fetch chunk document_ids in one query; group client-side to get per-document counts.
-    // Avoids N queries for N documents and stays within supabase-js's no-GROUP-BY constraint.
     const { data: chunkDocIds, error: chunkCountError } = await supabase
       .from("chunks")
       .select("document_id")

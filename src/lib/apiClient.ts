@@ -39,6 +39,7 @@ export interface DocumentData {
   status: string;
   job_index: number | null;
   chunk_count?: number;
+  metadata?: Record<string, unknown>;
 }
 
 export interface UploadDocumentResult {
