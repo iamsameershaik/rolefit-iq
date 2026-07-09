@@ -44,6 +44,7 @@ export default function App() {
           onNavigate={(p, jdId) => navigate(p, jdId)}
           sessionId={sessionId}
           onNewWorkspace={() => { setSessionId(null); navigate('upload'); }}
+          onAddMoreJDs={() => navigate('upload')}
         />
       )}
       {page === 'jd-detail' && (
@@ -51,6 +52,8 @@ export default function App() {
           onNavigate={(p, jdId) => navigate(p, jdId)}
           initialJdId={selectedJdId}
           sessionId={sessionId}
+          onAddMoreJDs={() => navigate('upload')}
+          onNewWorkspace={() => { setSessionId(null); navigate('upload'); }}
         />
       )}
     </AppShell>

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, Loader2, AlertCircle, PlusSquare } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2, AlertCircle, PlusSquare, Plus } from 'lucide-react';
 import RetroColorBars from '../components/brand/RetroColorBars';
 import CandidateSummaryCard from '../components/dashboard/CandidateSummaryCard';
 import JDSummaryCard from '../components/dashboard/JDSummaryCard';
 import RoleFitMatrix from '../components/dashboard/RoleFitMatrix';
+import RoleComparisonSummary from '../components/dashboard/RoleComparisonSummary';
 import StrengthsPanel from '../components/dashboard/StrengthsPanel';
 import SkillGapsPanel from '../components/dashboard/SkillGapsPanel';
 import RiskFlagsPanel from '../components/dashboard/RiskFlagsPanel';
@@ -21,6 +22,7 @@ interface Props {
   onNavigate: (page: Page, jdId?: string) => void;
   sessionId?: string | null;
   onNewWorkspace?: () => void;
+  onAddMoreJDs?: () => void;
 }
 
 function buildConsolidated(analyses: JDAnalysis[]) {
@@ -68,17 +70,22 @@ function buildCandidateProfile(resumeDoc: DocumentData | undefined, totalChunks:
   };
 }
 
-export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace }: Props) {
+function isSessionNotFound(error: string): boolean {
+  const lower = error.toLowerCase();
+  return lower.includes('not found') || lower.includes('deleted') || lower.includes('not_found');
+}
+
+export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace, onAddMoreJDs }: Props) {
   const isRealMode = !!sessionId;
 
-  const [realAnalyses, setRealAnalyses]       = useState<JDAnalysis[] | null>(null);
-  const [totalChunks, setTotalChunks]         = useState(0);
-  const [docCount, setDocCount]               = useState(0);
-  const [jdCount, setJdCount]                 = useState(0);
-  const [loading, setLoading]                 = useState(false);
-  const [loadError, setLoadError]             = useState<string | null>(null);
-  const [sessionStatus, setSessionStatus]     = useState<string | null>(null);
-  const [resumeDoc, setResumeDoc]             = useState<DocumentData | undefined>(undefined);
+  const [realAnalyses, setRealAnalyses]   = useState<JDAnalysis[] | null>(null);
+  const [totalChunks, setTotalChunks]     = useState(0);
+  const [docCount, setDocCount]           = useState(0);
+  const [jdCount, setJdCount]             = useState(0);
+  const [loading, setLoading]             = useState(false);
+  const [loadError, setLoadError]         = useState<string | null>(null);
+  const [sessionStatus, setSessionStatus] = useState<string | null>(null);
+  const [resumeDoc, setResumeDoc]         = useState<DocumentData | undefined>(undefined);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -117,6 +124,7 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
   const displayAnalyses    = hasRealAnalyses ? realAnalyses! : (isRealMode ? [] : jdAnalyses);
   const showEmptyRealState = isRealMode && !loading && realAnalyses !== null && realAnalyses.length === 0;
   const showFullDashboard  = hasRealAnalyses || !isRealMode;
+  const canAddMoreJDs      = isRealMode && jdCount < 3;
 
   const { strengths, uniqueGaps, uniqueFlags, questions } = buildConsolidated(
     showFullDashboard ? displayAnalyses : []
@@ -141,16 +149,30 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
               <ArrowLeft className="w-3 h-3" aria-hidden="true" />
               workspace
             </button>
-            {isRealMode && onNewWorkspace && (
-              <button
-                onClick={onNewWorkspace}
-                className="flex items-center gap-1.5 text-xs font-mono text-[#9A958F] hover:text-[#111111] transition-colors uppercase tracking-widest focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#111111] rounded-sm"
-                aria-label="Start a new workspace"
-              >
-                <PlusSquare className="w-3 h-3" aria-hidden="true" />
-                new workspace
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {isRealMode && onAddMoreJDs && (
+                <button
+                  onClick={onAddMoreJDs}
+                  disabled={!canAddMoreJDs}
+                  className="flex items-center gap-1.5 text-xs font-mono text-[#9A958F] hover:text-[#111111] transition-colors uppercase tracking-widest focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#111111] rounded-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label={canAddMoreJDs ? 'Add more job descriptions' : 'Maximum 3 JDs reached'}
+                  title={canAddMoreJDs ? 'Add more job descriptions' : 'Maximum of 3 JDs reached'}
+                >
+                  <Plus className="w-3 h-3" aria-hidden="true" />
+                  {canAddMoreJDs ? 'add more JDs' : '3 JDs max'}
+                </button>
+              )}
+              {isRealMode && onNewWorkspace && (
+                <button
+                  onClick={onNewWorkspace}
+                  className="flex items-center gap-1.5 text-xs font-mono text-[#9A958F] hover:text-[#111111] transition-colors uppercase tracking-widest focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#111111] rounded-sm"
+                  aria-label="Start a new workspace"
+                >
+                  <PlusSquare className="w-3 h-3" aria-hidden="true" />
+                  new workspace
+                </button>
+              )}
+            </div>
           </div>
           <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862] mb-1">
             {isRealMode ? (
@@ -186,12 +208,34 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
 
       {loadError && !loading && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-          <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm px-4 py-2 flex items-center gap-3">
-            <AlertCircle className="w-3.5 h-3.5 text-[#92600A] flex-shrink-0" aria-hidden="true" />
-            <p className="font-mono text-[10px] text-[#92600A] uppercase tracking-widest">
-              Could not load session: {loadError}
-            </p>
-          </div>
+          {isSessionNotFound(loadError) ? (
+            <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-widest text-[#92600A] mb-1">
+                  Workspace no longer available
+                </p>
+                <p className="text-xs text-[#6B6862] leading-relaxed">
+                  This workspace may have been deleted or reset. Start a new workspace to continue.
+                </p>
+              </div>
+              {onNewWorkspace && (
+                <button
+                  onClick={onNewWorkspace}
+                  className="flex items-center gap-1.5 bg-[#111111] text-[#F4F1EA] font-mono text-[11px] uppercase tracking-widest px-4 py-2.5 rounded-sm hover:bg-[#222222] transition-colors whitespace-nowrap focus-visible:outline-none flex-shrink-0"
+                >
+                  Start new workspace
+                  <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="bg-[#FFF8E7] border border-[#FADDAA] rounded-sm px-4 py-2 flex items-center gap-3">
+              <AlertCircle className="w-3.5 h-3.5 text-[#92600A] flex-shrink-0" aria-hidden="true" />
+              <p className="font-mono text-[10px] text-[#92600A] uppercase tracking-widest">
+                Could not load session: {loadError}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -218,13 +262,24 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
                 </p>
               )}
             </div>
-            <button
-              onClick={() => onNavigate('upload')}
-              className="flex items-center gap-1.5 bg-[#111111] text-[#F4F1EA] font-mono text-[11px] uppercase tracking-widest px-4 py-2.5 rounded-sm hover:bg-[#222222] transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#F4F1EA] flex-shrink-0"
-            >
-              Run analysis
-              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-            </button>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-shrink-0">
+              {onAddMoreJDs && canAddMoreJDs && (
+                <button
+                  onClick={onAddMoreJDs}
+                  className="flex items-center gap-1.5 border border-[#DDD8CE] text-[#6B6862] font-mono text-[11px] uppercase tracking-widest px-4 py-2.5 rounded-sm hover:border-[#111111] hover:text-[#111111] transition-colors whitespace-nowrap focus-visible:outline-none"
+                >
+                  <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                  Add more JDs
+                </button>
+              )}
+              <button
+                onClick={() => onNavigate('upload')}
+                className="flex items-center gap-1.5 bg-[#111111] text-[#F4F1EA] font-mono text-[11px] uppercase tracking-widest px-4 py-2.5 rounded-sm hover:bg-[#222222] transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#F4F1EA]"
+              >
+                Run analysis
+                <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            </div>
           </div>
 
           <div>
@@ -277,8 +332,41 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
                   onViewDetail={() => onNavigate('jd-detail', jd.id)}
                 />
               ))}
+              {/* Add more JDs slot (real mode, slots remaining) */}
+              {isRealMode && canAddMoreJDs && onAddMoreJDs && (
+                <button
+                  onClick={onAddMoreJDs}
+                  className="group border-2 border-dashed border-[#DDD8CE] hover:border-[#9A958F] rounded-sm p-5 flex flex-col items-center justify-center gap-2 transition-colors min-h-[140px]"
+                  aria-label="Add another job description"
+                >
+                  <Plus className="w-4 h-4 text-[#DDD8CE] group-hover:text-[#9A958F] transition-colors" aria-hidden="true" />
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] group-hover:text-[#6B6862] transition-colors">
+                    Add more JDs
+                  </span>
+                  <span className="font-mono text-[9px] text-[#DDD8CE] group-hover:text-[#9A958F] transition-colors">
+                    {3 - jdCount} slot{3 - jdCount !== 1 ? 's' : ''} remaining
+                  </span>
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Role portfolio comparison — real mode 2+ JDs; demo mode always */}
+          {isRealMode && hasRealAnalyses && displayAnalyses.length >= 2 && (
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-3">
+                03 · Role portfolio comparison
+              </p>
+              <p className="text-xs text-[#6B6862] mb-3 max-w-2xl">
+                Compare how the active CV maps across uploaded roles using direct, adjacent, transferable,
+                and missing evidence signals.
+              </p>
+              <div className="space-y-4">
+                <RoleComparisonSummary analyses={displayAnalyses} />
+                <RoleFitMatrix analyses={displayAnalyses} />
+              </div>
+            </div>
+          )}
 
           {!isRealMode && (
             <div>
@@ -289,7 +377,7 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
 
           <div>
             <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-3">
-              {isRealMode ? '03' : '04'} · Analysis panels
+              {isRealMode ? (displayAnalyses.length >= 2 ? '04' : '03') : '04'} · Analysis panels
             </p>
             <div className="grid md:grid-cols-2 gap-4">
               <StrengthsPanel strengths={strengths} />
@@ -301,14 +389,14 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
 
           <div>
             <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-3">
-              {isRealMode ? '04' : '05'} · JD-specific CV recommendations
+              {isRealMode ? (displayAnalyses.length >= 2 ? '05' : '04') : '05'} · JD-specific CV recommendations
             </p>
             <RewriteRecommendationsPanel jdAnalyses={displayAnalyses} />
           </div>
 
           <div>
             <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-3">
-              {isRealMode ? '05' : '06'} · Grounded assistant
+              {isRealMode ? (displayAnalyses.length >= 2 ? '06' : '05') : '06'} · Grounded assistant
             </p>
             <AssistantPanel sessionId={sessionId} jdCount={isRealMode ? jdCount : undefined} />
           </div>

@@ -28,11 +28,11 @@ function buildSuggestedPrompts(jdCount: number | undefined, isRealMode: boolean)
   }
   // Multiple JDs
   return [
-    'Which role is my strongest fit?',
-    'What skills am I missing for Job 1?',
-    `How does Job 2 compare against Job 1?`,
-    'What should I prepare for across all roles?',
-    'What should I avoid claiming?',
+    'Which role is my strongest fit and why?',
+    'What is the biggest shared gap across these roles?',
+    'How should I prioritise interview preparation?',
+    'Which JD should I tailor my CV for first?',
+    `Compare Job 1 and Job 2 using evidence.`,
   ];
 }
 

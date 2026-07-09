@@ -38,8 +38,10 @@ export default function UploadWorkspace({
   const [indexingSlotId, setIndexingSlotId] = useState<string | null>(null);
   const [isAnalysing, setIsAnalysing]       = useState(false);
   const [isDeleting, setIsDeleting]         = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm]    = useState(false);
-  const [showReplaceConfirm, setShowReplaceConfirm]  = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm]   = useState(false);
+  const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
+  const [showResetSuccess, setShowResetSuccess]     = useState(false);
+  const [showJdAdded, setShowJdAdded]               = useState(false);
   const pendingCVUpload = useRef<{ slot: DocumentSlot; rawText: string } | null>(null);
 
   const activeSessionId = localSessionId ?? externalSessionId ?? null;
@@ -118,6 +120,10 @@ export default function UploadWorkspace({
           chunkCount: dr.data.chunks_created,
           charCount:  dr.data.document.text_char_count ?? rawText.length,
         });
+        // Notify user to re-run analysis when adding JDs to an existing session
+        if (slot.type === 'jd' && activeSessionId) {
+          setShowJdAdded(true);
+        }
       } else {
         setApiError(`Indexing note: ${dr.error.message}`);
       }
@@ -155,6 +161,7 @@ export default function UploadWorkspace({
     onSessionReady?.('');
     setWorkspace(cloneWorkspace(emptyWorkspace));
     setApiError(null);
+    setShowResetSuccess(true);
 
     // Now proceed with the pending CV upload in the new (sessionless) context.
     const pending = pendingCVUpload.current;
@@ -322,6 +329,46 @@ export default function UploadWorkspace({
                 Replace &amp; reset
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Workspace reset success */}
+      {showResetSuccess && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="bg-[#EEFBF3] border border-[#B3EACC] rounded-sm px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[10px] text-[#1A7A41] uppercase tracking-widest mb-0.5">Workspace reset complete</p>
+              <p className="text-xs text-[#6B6862]">
+                Your previous workspace was cleared to prevent mixing evidence from different CVs. A fresh workspace is ready for the new CV.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowResetSuccess(false)}
+              className="font-mono text-[10px] text-[#1A7A41] uppercase tracking-widest focus-visible:outline-none flex-shrink-0"
+            >
+              continue
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* New JD indexed — re-run notice */}
+      {showJdAdded && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="bg-[#EEF4FF] border border-[#BFCFF8] rounded-sm px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[10px] text-[#1D4FAA] uppercase tracking-widest mb-0.5">New JD indexed</p>
+              <p className="text-xs text-[#6B6862]">
+                Click "Analyse role fit" to include it in your comparison.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowJdAdded(false)}
+              className="font-mono text-[10px] text-[#1D4FAA] uppercase tracking-widest focus-visible:outline-none flex-shrink-0"
+            >
+              dismiss
+            </button>
           </div>
         </div>
       )}

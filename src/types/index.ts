@@ -42,6 +42,13 @@ export type SkillSignal = 'strong' | 'moderate' | 'weak' | 'missing';
 export type EvidenceType = 'Direct' | 'Adjacent' | 'Transferable' | 'Missing';
 export type GapType = 'Missing' | 'Weakly evidenced' | 'Adjacent only';
 
+export interface ExperienceAlignment {
+  requirement: string;
+  alignment: string;
+  evidenceType: EvidenceType;
+  evidence: string[];
+}
+
 export interface EvidenceSnippetType {
   id: string;
   text: string;
@@ -114,6 +121,7 @@ export interface JDAnalysis {
   talkingPoints: string[];
   rewriteRecommendation: RewriteRecommendation;
   evidenceSnippets: EvidenceSnippetType[];
+  experienceAlignment?: ExperienceAlignment[];
   fitSummary: string;
   strongestAlignment: string[];
   weakestAlignment: string[];

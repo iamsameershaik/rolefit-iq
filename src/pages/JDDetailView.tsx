@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2, Plus, PlusSquare } from 'lucide-react';
 import RetroColorBars from '../components/brand/RetroColorBars';
 import JDSelector from '../components/detail/JDSelector';
 import JDDetailHeader from '../components/detail/JDDetailHeader';
@@ -17,12 +17,15 @@ interface Props {
   onNavigate: (page: Page, jdId?: string) => void;
   initialJdId?: string;
   sessionId?: string | null;
+  onAddMoreJDs?: () => void;
+  onNewWorkspace?: () => void;
 }
 
-export default function JDDetailView({ onNavigate, initialJdId, sessionId }: Props) {
+export default function JDDetailView({ onNavigate, initialJdId, sessionId, onAddMoreJDs, onNewWorkspace }: Props) {
   const isRealMode = !!sessionId;
 
   const [realAnalyses, setRealAnalyses] = useState<JDAnalysis[] | null>(null);
+  const [jdCount, setJdCount]           = useState(0);
   const [loading, setLoading]           = useState(false);
   const [loadError, setLoadError]       = useState<string | null>(null);
 
@@ -35,12 +38,14 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId }: Pro
         if (result.success && result.data.analyses.length > 0) {
           const docs = result.data.documents ?? [];
           const jds  = docs.filter((d: DocumentData) => d.document_type === 'job_description');
+          setJdCount(jds.length);
           const docsByJobIndex: Record<number, DocumentData> = {};
           for (const jd of jds) {
             if (jd.job_index !== null) docsByJobIndex[jd.job_index] = jd;
           }
           setRealAnalyses(mapAnalysesArray(result.data.analyses, docsByJobIndex));
         } else if (result.success) {
+          setJdCount((result.data.documents ?? []).filter((d: DocumentData) => d.document_type === 'job_description').length);
           setRealAnalyses([]);
         } else {
           setLoadError(result.error.message);
@@ -74,14 +79,38 @@ export default function JDDetailView({ onNavigate, initialJdId, sessionId }: Pro
     <div className="bg-[#F4F1EA] min-h-screen">
       <div className="border-b border-[#DDD8CE] bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
-          <button
-            onClick={() => onNavigate('results')}
-            className="flex items-center gap-1.5 text-xs font-mono text-[#9A958F] hover:text-[#111111] transition-colors uppercase tracking-widest mb-4 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#111111] rounded-sm"
-            aria-label="Back to results dashboard"
-          >
-            <ArrowLeft className="w-3 h-3" aria-hidden="true" />
-            results dashboard
-          </button>
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => onNavigate('results')}
+              className="flex items-center gap-1.5 text-xs font-mono text-[#9A958F] hover:text-[#111111] transition-colors uppercase tracking-widest focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#111111] rounded-sm"
+              aria-label="Back to results dashboard"
+            >
+              <ArrowLeft className="w-3 h-3" aria-hidden="true" />
+              results dashboard
+            </button>
+            <div className="flex items-center gap-3">
+              {isRealMode && onAddMoreJDs && (
+                <button
+                  onClick={onAddMoreJDs}
+                  disabled={jdCount >= 3}
+                  className="flex items-center gap-1.5 text-xs font-mono text-[#9A958F] hover:text-[#111111] transition-colors uppercase tracking-widest focus-visible:outline-none rounded-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={jdCount >= 3 ? 'Maximum of 3 JDs reached' : 'Add more job descriptions'}
+                >
+                  <Plus className="w-3 h-3" aria-hidden="true" />
+                  {jdCount >= 3 ? '3 JDs max' : 'add more JDs'}
+                </button>
+              )}
+              {isRealMode && onNewWorkspace && (
+                <button
+                  onClick={onNewWorkspace}
+                  className="flex items-center gap-1.5 text-xs font-mono text-[#9A958F] hover:text-[#111111] transition-colors uppercase tracking-widest focus-visible:outline-none rounded-sm"
+                >
+                  <PlusSquare className="w-3 h-3" aria-hidden="true" />
+                  new workspace
+                </button>
+              )}
+            </div>
+          </div>
           <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862] mb-1">
             {isRealMode ? (
               <span>

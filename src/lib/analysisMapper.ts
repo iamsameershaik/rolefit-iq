@@ -8,6 +8,7 @@ import type {
   PreparationPriority,
   EvidenceType,
   GapType,
+  ExperienceAlignment,
 } from '../types';
 import type { AnalysisRowData, DocumentData } from './apiClient';
 
@@ -59,6 +60,13 @@ interface BackendRewrite {
   keyword_suggestions?: string[];
   preparation_gaps?: string[];
   do_not_claim?: string[];
+}
+
+interface BackendExperienceAlignment {
+  requirement?: string;
+  alignment?: string;
+  evidence_type?: string;
+  evidence?: string[];
 }
 
 interface BackendEvidence {
@@ -128,6 +136,7 @@ export function mapAnalysisRow(row: AnalysisRowData, jdDoc?: DocumentData): JDAn
   const interviewQs  = asArray<BackendInterviewQuestion>(row.interview_questions);
   const talkingPts   = asArray<BackendTalkingPoint>(row.talking_points);
   const evidenceList = asArray<BackendEvidence>(row.evidence);
+  const expAlignment = asArray<BackendExperienceAlignment>(row.experience_alignment);
   const rewrite      = (row.rewrite_recommendations ?? {}) as BackendRewrite;
 
   return {
@@ -189,6 +198,13 @@ export function mapAnalysisRow(row: AnalysisRowData, jdDoc?: DocumentData): JDAn
       sourceType:   (e.source ?? '').toLowerCase().startsWith('cv') ? 'cv' : 'jd',
       relevance:    e.why_it_matters ?? '',
       evidenceType: toEvidenceType(e.evidence_type),
+    })),
+
+    experienceAlignment: expAlignment.map((ea): ExperienceAlignment => ({
+      requirement:  ea.requirement  ?? '',
+      alignment:    ea.alignment    ?? '',
+      evidenceType: toEvidenceType(ea.evidence_type) ?? 'Missing',
+      evidence:     ea.evidence     ?? [],
     })),
 
     fitSummary:         row.summary ?? '',
