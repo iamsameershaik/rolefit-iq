@@ -25,4 +25,4 @@ This documentation describes the repository as it exists today: an explainable c
 ## Decisions and demo material
 
 - [Architecture decision records](decisions/)
-- [Demo asset guidance](demo/asset-guidance.md)
+- [Demo assets and screenshots](demo/asset-guidance.md)

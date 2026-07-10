@@ -78,7 +78,7 @@ The current manual QA coverage and future automation path are in [TESTING.md](TE
 - [Security model](docs/security/mvp-security-model.md)
 - [QA checklist](docs/quality/qa-checklist.md)
 - [Productionisation plan](docs/operations/productionisation-plan.md)
-- [Demo asset guidance](docs/demo/asset-guidance.md)
+- [Demo assets and screenshots](docs/demo/asset-guidance.md)
 
 ## Brand and product identity
 
