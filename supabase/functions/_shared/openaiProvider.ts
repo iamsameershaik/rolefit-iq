@@ -206,7 +206,8 @@ export class OpenAIProvider implements AIProvider {
   // Handled within generateStructuredAnalysis — the analysis output includes
   // rewrite_recommendations as a top-level field. This method is a pass-through
   // that re-uses the analysis flow focused on the rewrite fields only.
-  async generateRewriteRecommendations(_input: RewriteInput): Promise<RewriteOutput> {
+  async generateRewriteRecommendations(input: RewriteInput): Promise<RewriteOutput> {
+    void input;
     throw new Error("generateRewriteRecommendations: use generateStructuredAnalysis which includes rewrite_recommendations");
   }
 
