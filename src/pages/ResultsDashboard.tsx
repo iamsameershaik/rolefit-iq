@@ -406,16 +406,16 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
             <div className="h-1 bg-[#7F1D1D]" />
             <div className="h-0.5 bg-[#450A0A]" />
             <div className="h-px bg-[#1a1a1a]" />
-          </div>
 
           {/* Full-width black assistant section */}
-          <div className="-mx-4 sm:-mx-6 lg:-mx-8 bg-black px-4 sm:px-6 lg:px-8 py-10">
+          <div className="bg-black px-4 sm:px-6 lg:px-8 py-10">
             <div className="max-w-7xl mx-auto">
               <p className="font-mono text-[10px] uppercase tracking-widest text-[#666] mb-3">
                 {isRealMode ? (displayAnalyses.length >= 2 ? '06' : '05') : '06'} · Grounded assistant
               </p>
               <AssistantPanel sessionId={sessionId} jdCount={isRealMode ? jdCount : undefined} />
             </div>
+          </div>
           </div>
 
           <div className="border-t border-[#DDD8CE] pt-4 flex flex-wrap gap-3">
