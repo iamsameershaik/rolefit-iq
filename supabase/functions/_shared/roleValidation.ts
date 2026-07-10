@@ -194,7 +194,7 @@ export function deriveSlotId(documentType: DocumentRole, jobIndex: number | null
 
 /**
  * Parse a user's natural-language JD reference (e.g. "Job 2", "JD 3", "job 1")
- * into a slot_id. Returns null if no valid JD number is found.
+ * into a job_index number. Returns null if no valid JD number is found.
  */
 export function parseJDReference(text: string): number | null {
   const match = /\b(?:jd|job)\s*(\d+)\b/i.exec(text);
@@ -202,6 +202,18 @@ export function parseJDReference(text: string): number | null {
   const num = parseInt(match[1], 10);
   if (num < 1 || num > 3) return null;
   return num;
+}
+
+/**
+ * Parse ALL JD references in a user's question (e.g. "Compare JD 2 and JD 3"
+ * returns [2, 3]). Only returns valid in-range numbers (1–3).
+ */
+export function parseAllJDReferences(text: string): number[] {
+  const matches = [...text.matchAll(/\b(?:jd|job)\s*(\d+)\b/gi)];
+  const nums = matches
+    .map((m) => parseInt(m[1], 10))
+    .filter((n) => n >= 1 && n <= 3);
+  return [...new Set(nums)];
 }
 
 /**

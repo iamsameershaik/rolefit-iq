@@ -398,11 +398,24 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
             <RewriteRecommendationsPanel jdAnalyses={displayAnalyses} />
           </div>
 
-          <div className="bg-[#050505] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-8 border-t border-[#1a1a1a]">
-            <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862] mb-3">
-              {isRealMode ? (displayAnalyses.length >= 2 ? '06' : '05') : '06'} · Grounded assistant
-            </p>
-            <AssistantPanel sessionId={sessionId} jdCount={isRealMode ? jdCount : undefined} />
+          {/* Retro band divider → transition to black assistant section */}
+          <div className="-mx-4 sm:-mx-6 lg:-mx-8">
+            {/* Stacked retro horizontal bands: warm orange, muted red, maroon, dark */}
+            <div className="h-1.5 bg-[#D97706]" />
+            <div className="h-1 bg-[#B91C1C]" />
+            <div className="h-1 bg-[#7F1D1D]" />
+            <div className="h-0.5 bg-[#450A0A]" />
+            <div className="h-px bg-[#1a1a1a]" />
+          </div>
+
+          {/* Full-width black assistant section */}
+          <div className="-mx-4 sm:-mx-6 lg:-mx-8 bg-black px-4 sm:px-6 lg:px-8 py-6">
+            <div className="max-w-3xl mx-auto">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-[#666] mb-3">
+                {isRealMode ? (displayAnalyses.length >= 2 ? '06' : '05') : '06'} · Grounded assistant
+              </p>
+              <AssistantPanel sessionId={sessionId} jdCount={isRealMode ? jdCount : undefined} />
+            </div>
           </div>
 
           <div className="border-t border-[#DDD8CE] pt-4 flex flex-wrap gap-3">

@@ -150,7 +150,9 @@ export class OpenAIProvider implements AIProvider {
 
   // ── Grounded chat answer ─────────────────────────────────────
   async generateGroundedAnswer(input: GroundedAnswerInput): Promise<GroundedAnswerOutput> {
-    const evidenceContext = this.formatChunkContext(input.retrieved_chunks);
+    // Use pre-built labelled context for multi-JD questions; auto-format otherwise
+    const evidenceContext = input.evidence_context_override
+      ?? this.formatChunkContext(input.retrieved_chunks);
     const { system, messages } = buildGroundedAnswerPrompt(
       input.question,
       evidenceContext,

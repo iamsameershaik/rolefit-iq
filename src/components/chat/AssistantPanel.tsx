@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import type { ChatMessage as ChatMessageType, EvidenceSnippetType } from '../../types';
 import ChatMessageComponent from './ChatMessage';
@@ -60,24 +60,6 @@ function mapCitationsToSnippets(citations: ChatCitation[]): EvidenceSnippetType[
   }));
 }
 
-function RetroStripes() {
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <div
-          key={i}
-          className="absolute left-0 right-0 h-px"
-          style={{
-            top: `${(i + 1) * 11}%`,
-            background: 'linear-gradient(90deg, transparent, rgba(26,26,26,0.4) 20%, rgba(26,26,26,0.4) 80%, transparent)',
-            opacity: 0.3 + (i % 2) * 0.15,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
 interface Props {
   sessionId?: string | null;
   jdCount?: number;
@@ -89,19 +71,29 @@ export default function AssistantPanel({ sessionId, jdCount }: Props) {
   const [messages, setMessages] = useState<ChatMessageType[]>(
     isRealMode ? [] : initialChatMessages
   );
-  const [input, setInput]       = useState('');
+  const [input, setInput]             = useState('');
   const [showPrompts, setShowPrompts] = useState(true);
   const [isLoading, setIsLoading]     = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Internal scroll container — only this element scrolls, never the page
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const suggestedPrompts = buildSuggestedPrompts(jdCount, isRealMode);
 
-  useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  // Scroll only the internal container to the bottom.
+  // Never call scrollIntoView or window.scrollTo — those move the whole page.
+  const scrollToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
     }
-  }, [messages]);
+  }, []);
+
+  useEffect(() => {
+    // Slight delay to ensure DOM is painted before scrolling the container
+    const id = setTimeout(scrollToBottom, 50);
+    return () => clearTimeout(id);
+  }, [messages, scrollToBottom]);
 
   async function sendReal(text: string) {
     if (!text.trim() || !sessionId) return;
@@ -200,17 +192,18 @@ export default function AssistantPanel({ sessionId, jdCount }: Props) {
     }
   }
 
-  return (
-    <div className="relative bg-[#050505] border border-[#1a1a1a] rounded-sm overflow-hidden flex flex-col">
-      <RetroStripes />
+  const hasMessages = messages.length > 0;
 
-      <div className="relative border-b border-[#1a1a1a] px-5 py-4 bg-[#050505]/95 backdrop-blur-sm z-10">
+  return (
+    <div className="bg-black flex flex-col">
+      {/* Header */}
+      <div className="border-b border-[#1a1a1a] px-5 py-3.5">
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862]">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#888]">
               Ask RoleFit IQ
             </p>
-            <p className="font-mono text-[9px] text-[#444] mt-0.5">
+            <p className="font-mono text-[9px] text-[#555] mt-0.5">
               {isRealMode
                 ? 'Grounded in your uploaded CV and job descriptions'
                 : 'Demo — grounded in sample workspace'}
@@ -219,7 +212,7 @@ export default function AssistantPanel({ sessionId, jdCount }: Props) {
           <span className={[
             'font-mono text-[9px] border px-2 py-0.5 rounded-sm',
             isRealMode
-              ? 'text-[#4CAF70] border-[#1A7A41]/30 bg-[#1A7A41]/10'
+              ? 'text-[#4CAF70] border-[#1A7A41]/40 bg-[#0a1f0a]'
               : 'text-[#9A958F] border-[#333] bg-[#111]',
           ].join(' ')}>
             {isRealMode ? 'real session' : 'demo mode'}
@@ -227,15 +220,16 @@ export default function AssistantPanel({ sessionId, jdCount }: Props) {
         </div>
       </div>
 
+      {/* Message area — internal scroll only */}
       <div
-        ref={scrollContainerRef}
-        className="relative flex-1 overflow-y-auto px-5 py-6 space-y-6 min-h-[400px] max-h-[600px] z-10"
+        ref={scrollRef}
+        className="overflow-y-auto px-5 py-4 space-y-4 min-h-[280px] max-h-[440px]"
       >
         {messages.map((m) => (
           <ChatMessageComponent key={m.id} message={m} />
         ))}
         {isLoading && (
-          <div className="flex items-center gap-2 text-[#6B6862] pl-1">
+          <div className="flex items-center gap-2 text-[#666] pl-1">
             <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" aria-hidden="true" />
             <span className="font-mono text-[10px] uppercase tracking-widest">Thinking…</span>
           </div>
@@ -249,24 +243,24 @@ export default function AssistantPanel({ sessionId, jdCount }: Props) {
             }}
           />
         )}
-        <div ref={bottomRef} />
       </div>
 
-      <div className="relative border-t border-[#1a1a1a] p-4 flex gap-2 items-end bg-[#050505]/95 backdrop-blur-sm z-10">
+      {/* Input */}
+      <div className="border-t border-[#1a1a1a] p-3 flex gap-2 items-end">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          rows={2}
+          rows={1}
           placeholder="Ask about fit, gaps, preparation…"
           aria-label="Chat input"
           disabled={isLoading}
-          className="flex-1 bg-[#0B0B0B] border border-[#1a1a1a] rounded-sm px-4 py-3 text-sm text-[#F4F1EA] placeholder:text-[#444] resize-none focus:outline-none focus:border-[#444] font-mono leading-relaxed disabled:opacity-50 transition-colors"
+          className="flex-1 bg-[#0B0B0B] border border-[#1a1a1a] rounded-sm px-3 py-2.5 text-sm text-[#E8E5E0] placeholder:text-[#444] resize-none focus:outline-none focus:border-[#444] font-mono leading-relaxed disabled:opacity-50 transition-colors"
         />
         <button
           onClick={() => sendMessage(input)}
           disabled={!input.trim() || isLoading}
-          className="bg-[#111111] border border-[#333] hover:border-[#555] text-[#F4F1EA] rounded-sm p-2.5 transition-colors duration-150 disabled:opacity-30 flex-shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#F4F1EA]"
+          className="bg-[#111] border border-[#333] hover:border-[#555] text-[#E8E5E0] rounded-sm p-2.5 transition-colors duration-150 disabled:opacity-30 flex-shrink-0 focus-visible:outline-none"
           aria-label="Send message"
         >
           {isLoading

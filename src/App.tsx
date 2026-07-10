@@ -75,7 +75,11 @@ export default function App() {
     if (jdId) setSelectedJdId(jdId);
     if (target === 'landing') setLoadSample(false);
     setPage(target);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Only scroll to top for explicit page changes (landing, upload), not for
+    // results navigation after analysis — that would jump the page.
+    if (target === 'landing' || target === 'upload') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }
 
   const uploadWorkspaceInitial: WorkspaceState | undefined = loadSample

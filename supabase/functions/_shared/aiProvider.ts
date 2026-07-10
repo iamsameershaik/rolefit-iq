@@ -45,6 +45,8 @@ export interface GroundedAnswerInput {
   retrieved_chunks: RetrievedChunk[];
   conversation_history: Array<{ role: string; content: string }>;
   available_slot_ids?: string[];
+  /** When provided, overrides the auto-formatted chunk context (used for multi-JD labelled blocks) */
+  evidence_context_override?: string;
 }
 
 export interface GroundedAnswerOutput {
