@@ -223,7 +223,7 @@ export default function AssistantPanel({ sessionId, jdCount }: Props) {
       {/* Message area — internal scroll only */}
       <div
         ref={scrollRef}
-        className="overflow-y-auto px-5 py-4 space-y-4 min-h-[420px] max-h-[640px]"
+        className="overflow-y-auto px-5 py-4 space-y-4 min-h-[560px] max-h-[800px]"
       >
         {messages.map((m) => (
           <ChatMessageComponent key={m.id} message={m} />
