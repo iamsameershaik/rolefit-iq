@@ -113,7 +113,6 @@ Deno.serve(async (req: Request) => {
     // ── Check for out-of-range JD references (JD 4+) before any DB work ──
     const outOfRange = findOutOfRangeJD(content);
     if (outOfRange !== null) {
-      const apiKey2 = Deno.env.get("OPENAI_API_KEY");
       const supabase2 = createServiceClient();
       const politeRefusal =
         `I can only answer questions about JD 1–JD 3 in this session. ` +

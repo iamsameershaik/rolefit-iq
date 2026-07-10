@@ -4,6 +4,7 @@ import { ok, err, internalError } from "../_shared/response.ts";
 import { createServiceClient } from "../_shared/supabaseClient.ts";
 import { createLogger } from "../_shared/logger.ts";
 import { validateSessionId } from "../_shared/validation.ts";
+import { deriveSlotId } from "../_shared/roleValidation.ts";
 import { AI_EVENT_TYPE, SESSION_STATUS, EMBEDDING, LLM } from "../_shared/constants.ts";
 import { OpenAIProvider } from "../_shared/openaiProvider.ts";
 import type { RetrievedChunk } from "../_shared/types.ts";
