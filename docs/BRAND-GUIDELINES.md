@@ -113,4 +113,4 @@ Avoid:
 - `social/rolefit-iq-readme-header.svg`
 - `css/rolefit-iq-brand-tokens.css`
 - `implementation/head-snippet.html`
-- `implementation/site.webmanifest`
+- `public/site.webmanifest`
