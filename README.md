@@ -76,13 +76,6 @@ A reusable synthetic evaluation dataset is included in [test-data](./test-data).
 
 It contains two synthetic CVs and five synthetic job descriptions spanning AI Engineering and Data Analytics roles. The dataset is intended for smoke testing, regression testing, reproducing the demo, and validating role-fit analysis across multiple scenarios.
 
-Example scenarios include:
-
-- Strong AI Engineer match
-- Strong Data Analyst match
-- Cross-domain mismatch
-- Multi-job-description comparison
-
 ## Documentation
 
 - [Documentation index](docs/index.md)
