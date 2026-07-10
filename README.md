@@ -2,9 +2,9 @@
   <img src="./public/brand/rolefit-iq-readme-header.png" alt="RoleFit IQ — Evidence-first career intelligence" />
 </p>
 
-**Evidence-first career intelligence for CV-to-role analysis.**
-
 # RoleFit IQ
+
+**Evidence-first career intelligence for CV-to-role analysis.**
 
 RoleFit IQ is an explainable career intelligence MVP. It compares one CV with up to three job descriptions, surfaces evidence-led fit estimates and gaps, and supports grounded follow-up questions against the uploaded material.
 
