@@ -28,6 +28,7 @@ export interface AnalysisOutput {
   risk_level: "Low" | "Medium" | "High";
   preparation_priority: "Low" | "Medium" | "High";
   summary: string;
+  score_explanation: Record<string, unknown>;
   strengths: unknown[];
   skill_gaps: unknown[];
   experience_alignment: unknown[];
@@ -43,6 +44,7 @@ export interface GroundedAnswerInput {
   question: string;
   retrieved_chunks: RetrievedChunk[];
   conversation_history: Array<{ role: string; content: string }>;
+  available_slot_ids?: string[];
 }
 
 export interface GroundedAnswerOutput {

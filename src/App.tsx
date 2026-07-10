@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AppShell from './components/layout/AppShell';
 import LandingPage from './pages/LandingPage';
 import UploadWorkspace from './pages/UploadWorkspace';
@@ -7,12 +7,69 @@ import JDDetailView from './pages/JDDetailView';
 import type { Page, WorkspaceState } from './types';
 import { sampleWorkspace } from './data/mockData';
 
+const SESSION_STORAGE_KEY = 'rolefit_iq_session';
+
+interface PersistedSession {
+  sessionId: string;
+  page: Page;
+  selectedJdId?: string;
+}
+
+function loadPersistedSession(): PersistedSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedSession;
+    if (!parsed.sessionId || !parsed.page) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function savePersistedSession(data: PersistedSession): void {
+  try {
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // localStorage may be unavailable (private mode) — silently ignore
+  }
+}
+
+function clearPersistedSession(): void {
+  try {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export default function App() {
-  const [page, setPage]           = useState<Page>('landing');
+  const [page, setPage] = useState<Page>('landing');
   const [loadSample, setLoadSample] = useState(false);
   const [selectedJdId, setSelectedJdId] = useState<string | undefined>(undefined);
-  // Real Supabase session ID — set by UploadWorkspace when backend connects
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
+
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const persisted = loadPersistedSession();
+    if (persisted) {
+      setSessionId(persisted.sessionId);
+      setPage(persisted.page);
+      if (persisted.selectedJdId) setSelectedJdId(persisted.selectedJdId);
+    }
+    setRestored(true);
+  }, []);
+
+  // Persist session whenever it changes
+  useEffect(() => {
+    if (!restored) return;
+    if (sessionId && page !== 'landing') {
+      savePersistedSession({ sessionId, page, selectedJdId });
+    } else if (!sessionId) {
+      clearPersistedSession();
+    }
+  }, [sessionId, page, selectedJdId, restored]);
 
   function navigate(target: Page, jdId?: string) {
     if (jdId) setSelectedJdId(jdId);
@@ -30,7 +87,11 @@ export default function App() {
       currentPage={page}
       onNavigate={(p) => navigate(p)}
       hasSession={!!sessionId}
-      onNewWorkspace={() => { setSessionId(null); navigate('upload'); }}
+      onNewWorkspace={() => {
+        clearPersistedSession();
+        setSessionId(null);
+        navigate('upload');
+      }}
     >
       {page === 'landing' && (
         <LandingPage onNavigate={(p) => navigate(p)} />
@@ -48,7 +109,11 @@ export default function App() {
         <ResultsDashboard
           onNavigate={(p, jdId) => navigate(p, jdId)}
           sessionId={sessionId}
-          onNewWorkspace={() => { setSessionId(null); navigate('upload'); }}
+          onNewWorkspace={() => {
+            clearPersistedSession();
+            setSessionId(null);
+            navigate('upload');
+          }}
           onAddMoreJDs={() => navigate('upload')}
         />
       )}
@@ -58,7 +123,11 @@ export default function App() {
           initialJdId={selectedJdId}
           sessionId={sessionId}
           onAddMoreJDs={() => navigate('upload')}
-          onNewWorkspace={() => { setSessionId(null); navigate('upload'); }}
+          onNewWorkspace={() => {
+            clearPersistedSession();
+            setSessionId(null);
+            navigate('upload');
+          }}
         />
       )}
     </AppShell>

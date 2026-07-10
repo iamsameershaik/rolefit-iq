@@ -9,6 +9,7 @@ import type {
   EvidenceType,
   GapType,
   ExperienceAlignment,
+  ScoreExplanation,
 } from '../types';
 import type { AnalysisRowData, DocumentData } from './apiClient';
 
@@ -141,6 +142,7 @@ export function mapAnalysisRow(row: AnalysisRowData, jdDoc?: DocumentData): JDAn
 
   return {
     id:                    jdId,
+    slotId:                row.slot_id ?? (row.job_index ? `jd-${String(row.job_index).padStart(2, '0')}` : undefined),
     title,
     company,
     location,
@@ -209,6 +211,7 @@ export function mapAnalysisRow(row: AnalysisRowData, jdDoc?: DocumentData): JDAn
     })),
 
     fitSummary:         row.summary ?? '',
+    scoreExplanation:   mapScoreExplanation(row.score_explanation),
     strongestAlignment: strengths.slice(0, 3).map((s) => {
       const tag = s.evidence_type ? ` [${s.evidence_type}]` : '';
       return `${s.title ?? ''}${tag}`;
@@ -238,4 +241,16 @@ export function mapAnalysesArray(
   return [...latestByJobIndex.values()]
     .sort((a, b) => (a.job_index ?? 0) - (b.job_index ?? 0))
     .map((r) => mapAnalysisRow(r, docsByJobIndex?.[r.job_index ?? 0]));
+}
+
+function mapScoreExplanation(raw: Record<string, unknown> | null | undefined): ScoreExplanation | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const keyFactors = Array.isArray(raw.key_factors)
+    ? raw.key_factors.filter((f): f is string => typeof f === 'string')
+    : [];
+  const whatHelped = typeof raw.what_helped === 'string' ? raw.what_helped : '';
+  const whatHurt = typeof raw.what_hurt === 'string' ? raw.what_hurt : '';
+  const howCalculated = typeof raw.how_calculated === 'string' ? raw.how_calculated : '';
+  if (!keyFactors.length && !whatHelped && !whatHurt && !howCalculated) return undefined;
+  return { keyFactors, whatHelped, whatHurt, howCalculated };
 }

@@ -155,6 +155,7 @@ export class OpenAIProvider implements AIProvider {
       input.question,
       evidenceContext,
       input.conversation_history,
+      input.available_slot_ids,
     );
 
     const started = Date.now();
@@ -209,10 +210,11 @@ export class OpenAIProvider implements AIProvider {
 
   // ── Private helpers ──────────────────────────────────────────
 
-  private formatChunkContext(chunks: Array<{ section_label?: string | null; chunk_index?: number; content: string; document_type?: string; job_index?: number | null }>): string {
+  private formatChunkContext(chunks: Array<{ section_label?: string | null; chunk_index?: number; content: string; document_type?: string; job_index?: number | null; slot_id?: string | null }>): string {
     if (chunks.length === 0) return "[No content provided]";
     return chunks.map((c) => {
-      const prefix = c.section_label ? `[${c.section_label}]\n` : "";
+      const slot = c.slot_id ?? (c.document_type === "resume" ? "cv" : `jd-${String(c.job_index ?? 0).padStart(2, "0")}`);
+      const prefix = c.section_label ? `[${slot.toUpperCase()} · ${c.section_label}]\n` : `[${slot.toUpperCase()}]\n`;
       return prefix + c.content;
     }).join("\n\n---\n\n");
   }
@@ -275,6 +277,12 @@ export class OpenAIProvider implements AIProvider {
         `Analysis could not be fully generated for ${jobTitle} due to a parsing error. ` +
         `The CV and JD were received (CV: ${candidateContext.length} chars, JD: ${jdContext.length} chars). ` +
         `Review the documents and re-run analysis for a full assessment.`,
+      score_explanation: {
+        key_factors: ["Parse failure — conservative fallback"],
+        what_helped: "Unable to determine due to parse failure.",
+        what_hurt: "Unable to determine due to parse failure.",
+        how_calculated: "Fallback estimate assigned due to AI output parse failure. Re-run analysis for a real assessment.",
+      },
       strengths: hasCV
         ? [{ title: "CV provided", explanation: "Candidate submitted a CV for review.", evidence_strength: "Weak", evidence: [] }]
         : [],
@@ -333,6 +341,7 @@ export class OpenAIProvider implements AIProvider {
       risk_level,
       preparation_priority,
       summary:                 typeof raw.summary === "string" ? raw.summary : "",
+      score_explanation:       (raw.score_explanation && typeof raw.score_explanation === "object") ? raw.score_explanation as Record<string, unknown> : {},
       strengths:               Array.isArray(raw.strengths)               ? raw.strengths               : [],
       skill_gaps:              Array.isArray(raw.skill_gaps)              ? raw.skill_gaps              : [],
       experience_alignment:    Array.isArray(raw.experience_alignment)    ? raw.experience_alignment    : [],

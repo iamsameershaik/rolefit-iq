@@ -18,6 +18,7 @@ import {
   extractJDMetadata,
   enrichMetadataWithOpenAI,
 } from "../_shared/documentMetadata.ts";
+import { validateDocumentRole, deriveSlotId } from "../_shared/roleValidation.ts";
 
 const log = createLogger("upload-document");
 
@@ -49,6 +50,18 @@ Deno.serve(async (req: Request) => {
     const file_name       = optionalString(body.file_name, "file_name");
     const mime_type       = optionalString(body.mime_type, "mime_type");
     const text_char_count = raw_text.length;
+
+    // ── Role validation: ensure content matches expected document type ──
+    const roleValidation = validateDocumentRole(raw_text, document_type);
+    if (!roleValidation.valid) {
+      return err(
+        "ROLE_VALIDATION_FAILED",
+        roleValidation.reason,
+        400,
+      );
+    }
+
+    const slot_id = deriveSlotId(document_type, job_index);
 
     void estimateTokens;
 
@@ -113,9 +126,10 @@ Deno.serve(async (req: Request) => {
         text_char_count,
         status:    DOCUMENT_STATUS.UPLOADED,
         job_index,
+        slot_id,
         metadata,
       })
-      .select("id, session_id, created_at, document_type, title, file_name, text_char_count, status, job_index, metadata")
+      .select("id, session_id, created_at, document_type, title, file_name, text_char_count, status, job_index, slot_id, metadata")
       .single();
 
     if (docError) {
@@ -159,6 +173,7 @@ Deno.serve(async (req: Request) => {
       document_id: document.id,
       document_type,
       job_index,
+      slot_id,
       raw_text,
     });
 
@@ -249,6 +264,7 @@ Deno.serve(async (req: Request) => {
       document_id:    c.document_id,
       document_type:  c.document_type,
       job_index:      c.job_index,
+      slot_id:        c.slot_id,
       section_label:  c.section_label,
       chunk_index:    c.chunk_index,
       content:        c.content,
@@ -361,6 +377,7 @@ Deno.serve(async (req: Request) => {
         text_char_count: document.text_char_count,
         status:          DOCUMENT_STATUS.INDEXED,
         job_index:       document.job_index,
+        slot_id:         document.slot_id,
         metadata:        document.metadata ?? {},
       },
       chunks_created:  embeddedChunks.length,

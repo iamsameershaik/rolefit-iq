@@ -398,8 +398,8 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
             <RewriteRecommendationsPanel jdAnalyses={displayAnalyses} />
           </div>
 
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-[#9A958F] mb-3">
+          <div className="bg-[#050505] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-8 border-t border-[#1a1a1a]">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862] mb-3">
               {isRealMode ? (displayAnalyses.length >= 2 ? '06' : '05') : '06'} · Grounded assistant
             </p>
             <AssistantPanel sessionId={sessionId} jdCount={isRealMode ? jdCount : undefined} />

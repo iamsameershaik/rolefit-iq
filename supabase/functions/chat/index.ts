@@ -7,6 +7,7 @@ import { validateSessionId, requiredString } from "../_shared/validation.ts";
 import { AI_EVENT_TYPE, RETRIEVAL, EMBEDDING, LLM } from "../_shared/constants.ts";
 import { OpenAIProvider } from "../_shared/openaiProvider.ts";
 import { retrieveRelevantChunks } from "../_shared/retrieval.ts";
+import { findOutOfRangeJD, parseJDReference, deriveSlotId } from "../_shared/roleValidation.ts";
 
 const log = createLogger("chat");
 
@@ -31,8 +32,46 @@ Deno.serve(async (req: Request) => {
     }
 
     // Optional: scope retrieval to a specific JD
-    const selected_job_index: number | null =
+    let selected_job_index: number | null =
       typeof body.selected_job_index === "number" ? body.selected_job_index : null;
+
+    // ── Resolve JD number from user's question (e.g. "Job 2" → job_index=2) ──
+    const referencedJD = parseJDReference(content);
+    if (referencedJD !== null && selected_job_index === null) {
+      selected_job_index = referencedJD;
+    }
+
+    // ── Check for out-of-range JD references (JD 4+) ──
+    const outOfRange = findOutOfRangeJD(content);
+    if (outOfRange !== null) {
+      const politeRefusal =
+        `I can only answer questions about JD 1–JD 3 in this session. ` +
+        `JD ${outOfRange} has not been uploaded. ` +
+        `Please ask about one of the available job descriptions.`;
+
+      const { data: assistantMsg } = await supabase
+        .from("chat_messages")
+        .insert({
+          session_id,
+          role:      "assistant",
+          content:   politeRefusal,
+          citations: [],
+          retrieved_chunk_ids: [],
+          metadata:  { model: "guardrail", reason: "jd_out_of_range" },
+        })
+        .select("id, created_at")
+        .single();
+
+      return ok({
+        answer:              politeRefusal,
+        citations:           [],
+        retrieved_chunk_ids: [],
+        retrieved_chunks:    [],
+        message_id:          assistantMsg?.id ?? null,
+        user_message_id:     userMsg?.id ?? null,
+        model:               "guardrail",
+      });
+    }
 
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) {
@@ -109,6 +148,52 @@ Deno.serve(async (req: Request) => {
       return err("RETRIEVAL_ERROR", "Failed to retrieve evidence chunks", 500, msg);
     }
 
+    // ── Fetch available JD slot_ids for context ──────────────────
+    const { data: jdDocs } = await supabase
+      .from("documents")
+      .select("slot_id, job_index")
+      .eq("session_id", session_id)
+      .eq("document_type", "job_description")
+      .eq("status", "indexed")
+      .is("deleted_at", null)
+      .order("job_index", { ascending: true });
+
+    const availableSlotIds = (jdDocs ?? [])
+      .map((d: { slot_id: string | null; job_index: number | null }) =>
+        d.slot_id ?? deriveSlotId("job_description", d.job_index))
+      .filter(Boolean) as string[];
+
+    // ── If user asked about a specific JD that hasn't been uploaded ──
+    if (selected_job_index !== null && !availableSlotIds.includes(deriveSlotId("job_description", selected_job_index))) {
+      const politeRefusal =
+        `JD ${selected_job_index} has not been uploaded in this session. ` +
+        `Only the following job descriptions are available: ${availableSlotIds.map(s => s.toUpperCase()).join(", ") || "none"}. ` +
+        `Please ask about one of the available JDs.`;
+
+      const { data: assistantMsg } = await supabase
+        .from("chat_messages")
+        .insert({
+          session_id,
+          role:      "assistant",
+          content:   politeRefusal,
+          citations: [],
+          retrieved_chunk_ids: [],
+          metadata:  { model: "guardrail", reason: "jd_not_uploaded" },
+        })
+        .select("id, created_at")
+        .single();
+
+      return ok({
+        answer:              politeRefusal,
+        citations:           [],
+        retrieved_chunk_ids: [],
+        retrieved_chunks:    [],
+        message_id:          assistantMsg?.id ?? null,
+        user_message_id:     userMsg?.id ?? null,
+        model:               "guardrail",
+      });
+    }
+
     const retrievalLatency = Date.now() - retrievalStart;
 
     await supabase.from("ai_events").insert({
@@ -138,6 +223,7 @@ Deno.serve(async (req: Request) => {
         question:             content,
         retrieved_chunks:     retrievalResult.chunks,
         conversation_history: conversationHistory,
+        available_slot_ids:   availableSlotIds,
       });
     } catch (answerErr) {
       const msg = (answerErr as Error).message;

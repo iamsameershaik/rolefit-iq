@@ -28,6 +28,7 @@ export interface DocumentRow {
   text_char_count: number | null;
   status: string;
   job_index: number | null;
+  slot_id: string | null;
   parse_warning: string | null;
   deleted_at: string | null;
 }
@@ -38,6 +39,7 @@ export interface ChunkRow {
   document_id: string;
   document_type: string;
   job_index: number | null;
+  slot_id: string | null;
   section_label: string | null;
   chunk_index: number;
   content: string;
@@ -52,6 +54,8 @@ export interface AnalysisRow {
   session_id: string;
   job_document_id: string | null;
   job_index: number | null;
+  slot_id: string | null;
+  evaluation_run_id: string | null;
   created_at: string;
   updated_at: string;
   fit_tier: string | null;
@@ -60,6 +64,7 @@ export interface AnalysisRow {
   risk_level: string | null;
   preparation_priority: string | null;
   summary: string | null;
+  score_explanation: Record<string, unknown>;
   strengths: unknown[];
   skill_gaps: unknown[];
   experience_alignment: unknown[];
@@ -103,6 +108,7 @@ export interface RetrievedChunk {
   document_id: string;
   document_type: string;
   job_index: number | null;
+  slot_id: string | null;
   section_label: string | null;
   chunk_index: number;
   content: string;

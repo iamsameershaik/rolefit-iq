@@ -91,10 +91,11 @@ export function formatChunksAsContext(chunks: RetrievedChunk[]): string {
   if (chunks.length === 0) return "[No retrieved evidence available]";
   return chunks
     .map((c, i) => {
+      const slot = c.slot_id ?? (c.document_type === "resume" ? "cv" : `jd-${String(c.job_index ?? 0).padStart(2, "0")}`);
       const source =
         c.document_type === "resume"
           ? `CV · ${c.section_label ?? "General"} · Chunk ${String(c.chunk_index).padStart(2, "0")}`
-          : `JD ${c.job_index} · ${c.section_label ?? "General"} · Chunk ${String(c.chunk_index).padStart(2, "0")}`;
+          : `${slot.toUpperCase()} · ${c.section_label ?? "General"} · Chunk ${String(c.chunk_index).padStart(2, "0")}`;
       return `[${i + 1}] ${source}\n${c.content}`;
     })
     .join("\n\n---\n\n");

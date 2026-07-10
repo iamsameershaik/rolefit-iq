@@ -207,10 +207,17 @@ export default function UploadCard({ slot, onStatusChange, onRealUpload, isIndex
                   {slot.charCount?.toLocaleString() ?? '—'}
                 </p>
               </div>
+            {isIndexing ? (
               <div>
-                <p className="font-mono text-[10px] text-[#9A958F] uppercase tracking-widest">Chunks</p>
+                <p className="font-mono text-[10px] text-[#9A958F] uppercase tracking-widest">Evidence chunks</p>
+                <p className="font-mono text-xs text-[#6B6862] animate-pulse">INDEXING…</p>
+              </div>
+            ) : (
+              <div>
+                <p className="font-mono text-[10px] text-[#9A958F] uppercase tracking-widest">Evidence chunks</p>
                 <p className="font-mono text-xs text-[#111111]">{slot.chunkCount ?? '—'}</p>
               </div>
+            )}
             </div>
           </div>
         )}

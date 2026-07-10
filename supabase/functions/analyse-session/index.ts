@@ -59,7 +59,7 @@ Deno.serve(async (req: Request) => {
     // ── Fetch documents with raw_text ───────────────────────────
     const { data: documents, error: docsError } = await supabase
       .from("documents")
-      .select("id, document_type, job_index, title, raw_text, status, created_at")
+      .select("id, document_type, job_index, slot_id, title, raw_text, status, created_at")
       .eq("session_id", session_id)
       .eq("status", "indexed")
       .is("deleted_at", null)
@@ -84,7 +84,24 @@ Deno.serve(async (req: Request) => {
     }
 
     // Pick the most recently created CV (last in ascending created_at order)
-    const cvDoc = cvDocs[cvDocs.length - 1] as { id: string; raw_text: string; title: string | null };
+    const cvDoc = cvDocs[cvDocs.length - 1] as { id: string; raw_text: string; title: string | null; slot_id: string | null };
+
+    // ── Create evaluation_run ────────────────────────────────────
+    const { data: evalRun, error: evalRunError } = await supabase
+      .from("evaluation_runs")
+      .insert({
+        session_id,
+        status:           "running",
+        model_used:       chatModel,
+        total_jobs_compared: jdDocs.length,
+      })
+      .select("id")
+      .single();
+
+    const evaluationRunId = evalRun?.id ?? null;
+    if (evalRunError) {
+      log.warn("Failed to create evaluation_run", { session_id, metadata: { error: evalRunError.message } });
+    }
 
     log.info("Analysis starting", {
       session_id,
@@ -126,7 +143,7 @@ Deno.serve(async (req: Request) => {
 
     // ── Analyse each JD ─────────────────────────────────────────
     for (const jdDoc of jdDocs as Array<{
-      id: string; job_index: number; title: string | null; raw_text: string;
+      id: string; job_index: number; slot_id: string | null; title: string | null; raw_text: string;
     }>) {
       const jobStarted = Date.now();
       const jobTitle   = jdDoc.title ?? `Job Description ${jdDoc.job_index}`;
@@ -152,6 +169,7 @@ Deno.serve(async (req: Request) => {
           document_id:   cvDoc.id,
           document_type: "resume",
           job_index:     null,
+          slot_id:       cvDoc.slot_id ?? "cv",
           section_label: null,
           chunk_index:   0,
           content:       cvDoc.raw_text ?? "",
@@ -164,6 +182,7 @@ Deno.serve(async (req: Request) => {
           document_id:   jdDoc.id,
           document_type: "job_description",
           job_index:     jdDoc.job_index,
+          slot_id:       jdDoc.slot_id ?? deriveSlotId("job_description", jdDoc.job_index),
           section_label: null,
           chunk_index:   0,
           content:       jdDoc.raw_text ?? "",
@@ -198,6 +217,13 @@ Deno.serve(async (req: Request) => {
           .update({ status: SESSION_STATUS.FAILED, updated_at: new Date().toISOString() })
           .eq("id", session_id);
 
+        if (evaluationRunId) {
+          await supabase
+            .from("evaluation_runs")
+            .update({ status: "failed", error_message: msg })
+            .eq("id", evaluationRunId);
+        }
+
         return err(
           "ANALYSIS_ERROR",
           `AI analysis failed for "${jobTitle}" (job ${jdDoc.job_index}): ${msg}`,
@@ -212,12 +238,15 @@ Deno.serve(async (req: Request) => {
           session_id,
           job_document_id:         jdDoc.id,
           job_index:               jdDoc.job_index,
+          slot_id:                 jdDoc.slot_id ?? deriveSlotId("job_description", jdDoc.job_index),
+          evaluation_run_id:       evaluationRunId,
           fit_tier:                output.fit_tier,
           fit_estimate:            output.fit_estimate,
           evidence_strength:       output.evidence_strength,
           risk_level:              output.risk_level,
           preparation_priority:    output.preparation_priority,
           summary:                 output.summary,
+          score_explanation:       output.score_explanation ?? {},
           strengths:               output.strengths,
           skill_gaps:              output.skill_gaps,
           experience_alignment:    output.experience_alignment,
@@ -246,6 +275,13 @@ Deno.serve(async (req: Request) => {
           .from("sessions")
           .update({ status: SESSION_STATUS.FAILED, updated_at: new Date().toISOString() })
           .eq("id", session_id);
+
+        if (evaluationRunId) {
+          await supabase
+            .from("evaluation_runs")
+            .update({ status: "failed", error_message: insertError.message })
+            .eq("id", evaluationRunId);
+        }
 
         return err(
           "DB_ERROR",
@@ -290,6 +326,17 @@ Deno.serve(async (req: Request) => {
       .from("sessions")
       .update({ status: SESSION_STATUS.ANALYSED, updated_at: new Date().toISOString() })
       .eq("id", session_id);
+
+    // ── Update evaluation_run ───────────────────────────────────
+    if (evaluationRunId) {
+      await supabase
+        .from("evaluation_runs")
+        .update({
+          status:    "completed",
+          latency_ms: Date.now() - started,
+        })
+        .eq("id", evaluationRunId);
+    }
 
     await supabase.from("ai_events").insert({
       session_id,

@@ -32,6 +32,7 @@ export interface ChunkInput {
   document_id: string;
   document_type: string;
   job_index: number | null;
+  slot_id: string | null;
   raw_text: string;
 }
 
@@ -40,6 +41,7 @@ export interface ChunkResult {
   document_id: string;
   document_type: string;
   job_index: number | null;
+  slot_id: string | null;
   section_label: string | null;
   chunk_index: number;
   content: string;
@@ -104,7 +106,7 @@ export function estimateTokens(text: string): number {
  * Returns [] if the text is too short to be worth chunking.
  */
 export function chunkDocument(input: ChunkInput): ChunkResult[] {
-  const { session_id, document_id, document_type, job_index, raw_text } = input;
+  const { session_id, document_id, document_type, job_index, slot_id, raw_text } = input;
 
   const text = normaliseText(raw_text);
   if (text.length < CHUNKING.MIN_CHUNK_CHARS) return [];
@@ -128,6 +130,7 @@ export function chunkDocument(input: ChunkInput): ChunkResult[] {
       document_id,
       document_type,
       job_index,
+      slot_id,
       section_label: currentLabel,
       chunk_index: chunks.length,
       content,
@@ -184,6 +187,7 @@ export function toChunkRows(
     document_id: c.document_id,
     document_type: c.document_type,
     job_index: c.job_index,
+    slot_id: c.slot_id,
     section_label: c.section_label,
     chunk_index: c.chunk_index,
     content: c.content,

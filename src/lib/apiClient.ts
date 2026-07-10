@@ -38,6 +38,7 @@ export interface DocumentData {
   text_char_count: number | null;
   status: string;
   job_index: number | null;
+  slot_id?: string | null;
   chunk_count?: number;
   metadata?: Record<string, unknown>;
 }
@@ -56,6 +57,8 @@ export interface AnalysisRowData {
   session_id: string;
   job_document_id: string | null;
   job_index: number | null;
+  slot_id: string | null;
+  evaluation_run_id: string | null;
   created_at: string;
   updated_at: string;
   fit_tier: string | null;
@@ -64,6 +67,7 @@ export interface AnalysisRowData {
   risk_level: string | null;
   preparation_priority: string | null;
   summary: string | null;
+  score_explanation: Record<string, unknown> | null;
   strengths: unknown;
   skill_gaps: unknown;
   experience_alignment: unknown;
@@ -89,6 +93,7 @@ export interface RetrievedChunk {
   document_id: string;
   document_type: string;
   job_index: number | null;
+  slot_id: string | null;
   section_label: string | null;
   chunk_index: number;
   content: string;
@@ -233,4 +238,15 @@ export function deleteSession(sessionId: string) {
   return callFunction<{ session_id: string; deleted: boolean }>("delete-session", {
     body: { session_id: sessionId },
   });
+}
+
+export interface TailoredCVResponse {
+  tailored_cv: unknown;
+}
+
+export function generateTailoredCV(payload: {
+  session_id: string;
+  job_document_id: string;
+}) {
+  return callFunction<TailoredCVResponse>("generate-tailored-cv", { body: payload });
 }

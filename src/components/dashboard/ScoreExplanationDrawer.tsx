@@ -124,6 +124,57 @@ export default function ScoreExplanationDrawer({ analysis, onClose }: Props) {
             </div>
           </div>
 
+          {/* AI-generated score explanation */}
+          {analysis.scoreExplanation && (
+            <div className="bg-white border border-[#DDD8CE] rounded-sm overflow-hidden">
+              <div className="border-b border-[#DDD8CE] px-4 py-3">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-[#6B6862]">
+                  AI score reasoning
+                </p>
+              </div>
+              <div className="p-4 space-y-3">
+                {analysis.scoreExplanation.keyFactors.length > 0 && (
+                  <div>
+                    <p className="font-mono text-[10px] text-[#9A958F] uppercase tracking-widest mb-1.5">
+                      Key factors
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {analysis.scoreExplanation.keyFactors.map((f, i) => (
+                        <span key={i} className="font-mono text-[10px] bg-[#F4F1EA] border border-[#DDD8CE] text-[#6B6862] px-2 py-0.5 rounded-sm">
+                          {f}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {analysis.scoreExplanation.whatHelped && (
+                  <div>
+                    <p className="font-mono text-[10px] text-[#1A7A41] uppercase tracking-widest mb-1">
+                      What helped
+                    </p>
+                    <p className="text-xs text-[#6B6862] leading-relaxed">{analysis.scoreExplanation.whatHelped}</p>
+                  </div>
+                )}
+                {analysis.scoreExplanation.whatHurt && (
+                  <div>
+                    <p className="font-mono text-[10px] text-[#D42E3A] uppercase tracking-widest mb-1">
+                      What hurt
+                    </p>
+                    <p className="text-xs text-[#6B6862] leading-relaxed">{analysis.scoreExplanation.whatHurt}</p>
+                  </div>
+                )}
+                {analysis.scoreExplanation.howCalculated && (
+                  <div>
+                    <p className="font-mono text-[10px] text-[#9A958F] uppercase tracking-widest mb-1">
+                      How calculated
+                    </p>
+                    <p className="text-xs text-[#6B6862] leading-relaxed">{analysis.scoreExplanation.howCalculated}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Positive evidence */}
           <div className="bg-white border border-[#DDD8CE] rounded-sm overflow-hidden">
             <div className="border-b border-[#DDD8CE] px-4 py-3 flex items-center gap-2">

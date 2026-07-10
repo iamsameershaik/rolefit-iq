@@ -104,6 +104,7 @@ export interface RewriteRecommendation {
 
 export interface JDAnalysis {
   id: string;
+  slotId?: string;
   title: string;
   company: string;
   location?: string;
@@ -123,11 +124,19 @@ export interface JDAnalysis {
   evidenceSnippets: EvidenceSnippetType[];
   experienceAlignment?: ExperienceAlignment[];
   fitSummary: string;
+  scoreExplanation?: ScoreExplanation;
   strongestAlignment: string[];
   weakestAlignment: string[];
   candidateNarrative: string;
   /** Raw job_document_id from backend — used to call generate-tailored-cv */
   jobDocumentId?: string;
+}
+
+export interface ScoreExplanation {
+  keyFactors: string[];
+  whatHelped: string;
+  whatHurt: string;
+  howCalculated: string;
 }
 
 export interface CandidateProfile {

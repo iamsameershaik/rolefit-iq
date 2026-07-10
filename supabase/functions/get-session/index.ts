@@ -45,7 +45,7 @@ Deno.serve(async (req: Request) => {
     // Fetch documents — include metadata, omit raw_text (reduces payload)
     const { data: documents, error: docsError } = await supabase
       .from("documents")
-      .select("id, session_id, created_at, updated_at, document_type, title, file_name, mime_type, text_char_count, status, job_index, parse_warning, metadata, deleted_at")
+      .select("id, session_id, created_at, updated_at, document_type, title, file_name, mime_type, text_char_count, status, job_index, slot_id, parse_warning, metadata, deleted_at")
       .eq("session_id", session_id)
       .is("deleted_at", null)
       .order("created_at", { ascending: true });

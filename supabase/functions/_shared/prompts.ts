@@ -4,7 +4,7 @@
 
 export const PROMPT_NAMES = {
   FIT_ANALYSIS:    "rolefit_iq_fit_analysis_v2",
-  GROUNDED_ANSWER: "rolefit_iq_grounded_answer_v1",
+  GROUNDED_ANSWER: "rolefit_iq_grounded_answer_v2",
   CV_REWRITE:      "rolefit_iq_cv_rewrite_v1",
 } as const;
 
@@ -19,6 +19,7 @@ GUARDRAILS — follow these without exception:
 - Use hedged language: "evidence suggests", "the CV indicates", "based on the text".
 - do_not_claim must list things that would misrepresent the CV if claimed.
 - rewrite_recommendations must only strengthen existing evidence, never invent it.
+- Every fit estimate MUST include a score_explanation explaining the key factors.
 `.trim();
 
 // ── Analysis prompt ──────────────────────────────────────────────
@@ -66,6 +67,12 @@ REQUIRED JSON OUTPUT SCHEMA (respond with valid JSON only, no markdown):
   "risk_level": "Low | Medium | High",
   "preparation_priority": "Low | Medium | High",
   "summary": "<2–4 sentence plain-language summary of overall fit, naming the strongest evidence and the most significant gap>",
+  "score_explanation": {
+    "key_factors": ["<factor 1>", "<factor 2>", "<factor 3>"],
+    "what_helped": "<what evidence raised the score>",
+    "what_hurt": "<what missing evidence lowered the score>",
+    "how_calculated": "<brief explanation of the scoring logic>"
+  },
   "strengths": [
     {
       "title": string,
@@ -151,18 +158,39 @@ export function buildGroundedAnswerPrompt(
   question: string,
   evidenceContext: string,
   conversationHistory: Array<{ role: string; content: string }>,
+  availableSlotIds: string[] = [],
 ): { system: string; messages: Array<{ role: string; content: string }> } {
+  const slotList = availableSlotIds.length > 0
+    ? availableSlotIds.join(", ")
+    : "none yet";
+
   const system = `You are RoleFit IQ, a grounded career intelligence assistant.
 Answer the candidate's question using ONLY the retrieved evidence chunks provided.
 
 ${GUARDRAILS}
+
+SCOPE — what you may answer about:
+- Role fit analysis, evidence strength, and alignment for uploaded CV/JDs
+- Skill gaps, missing experience, and risk flags
+- Role comparison across uploaded job descriptions
+- Interview preparation, talking points, and evidence to mention
+- Evidence from the uploaded documents only
+
+SCOPE — what you must NOT do:
+- Do not answer general chat, weather, coding tasks, unrelated advice, or generic LLM questions.
+- Do not answer questions about documents that have not been uploaded.
+- If asked about JD 4, JD 5, or any JD beyond the 3 uploaded, politely explain that only JD 1–JD 3 are available in this session.
+- If the question is unrelated to career intelligence or the uploaded documents, politely refuse and explain that RoleFit IQ only answers questions grounded in the uploaded CV and job descriptions.
+
+AVAILABLE JD SLOTS: ${slotList}
+When the user refers to "Job 2" or "JD 2", they mean slot jd-02. Match citations to the correct slot_id.
 
 ANSWER FORMAT (respond with valid JSON only, no markdown):
 {
   "answer": "<your detailed answer in plain text. 1–4 paragraphs, concise and useful>",
   "citations": [
     {
-      "source": "<e.g. CV · Experience · Chunk 02>",
+      "source": "<e.g. CV · Experience · Chunk 02, or JD-02 · Requirements · Chunk 01>",
       "document_type": "resume | job_description",
       "job_index": <null or 1|2|3>,
       "snippet": "<direct quote from the evidence, max 2 sentences>",
@@ -174,8 +202,10 @@ ANSWER FORMAT (respond with valid JSON only, no markdown):
 RULES:
 - If evidence is insufficient: say so in the answer rather than guessing.
 - Include 1–4 citations. Only cite chunks that directly support a claim.
+- Label citations with the correct slot_id (e.g. "JD-01", "JD-02", "JD-03", or "CV").
 - Do not make hiring guarantees.
-- Do not speculate about experience not in the evidence.`;
+- Do not speculate about experience not in the evidence.
+- If the user asks an out-of-scope question, set answer to a polite refusal and leave citations empty.`;
 
   const recent = conversationHistory.slice(-6);
   const messages: Array<{ role: string; content: string }> = [

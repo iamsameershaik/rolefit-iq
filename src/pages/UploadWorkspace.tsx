@@ -43,6 +43,7 @@ export default function UploadWorkspace({
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
   const [showResetSuccess, setShowResetSuccess]     = useState(false);
   const [showJdAdded, setShowJdAdded]               = useState(false);
+  const [jdAddedCount, setJdAddedCount]               = useState(0);
 
   // Track which job_indices are already occupied in the backend session
   const [backendJdIndices, setBackendJdIndices] = useState<number[]>([]);
@@ -109,7 +110,7 @@ export default function UploadWorkspace({
   const indexedCount  = allSlots.filter((s) => s.status === 'indexed').length;
   const hasCV         = workspace.cv.status !== 'empty';
   const hasAnyJD      = workspace.jds.some((j) => j.status !== 'empty');
-  const canAnalyse    = activeSessionId ? true : (hasCV && hasAnyJD);
+  const canAnalyse    = activeSessionId ? (hasCV && hasAnyJD) : (hasCV && hasAnyJD);
 
   // Number of JD slots still available for upload
   const backendJdCount = backendJdIndices.length;
@@ -203,11 +204,18 @@ export default function UploadWorkspace({
           // Record this index as occupied so subsequent uploads in the same session get the next slot
           setBackendJdIndices((prev) => [...prev, jobIndex as number]);
           if (activeSessionId) {
+            const newCount = backendJdIndices.length + 1;
+            setJdAddedCount(newCount);
             setShowJdAdded(true);
           }
         }
       } else {
-        setApiError(`Indexing note: ${dr.error.message}`);
+        const code = dr.error.code;
+        if (code === 'ROLE_VALIDATION_FAILED') {
+          setApiError(`Document rejected: ${dr.error.message}`);
+        } else {
+          setApiError(`Indexing note: ${dr.error.message}`);
+        }
       }
     } catch {
       setApiError('Backend unavailable — using mock mode.');
@@ -471,9 +479,13 @@ export default function UploadWorkspace({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
           <div className="bg-[#EEF4FF] border border-[#BFCFF8] rounded-sm px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
-              <p className="font-mono text-[10px] text-[#1D4FAA] uppercase tracking-widest mb-0.5">New JD indexed</p>
+              <p className="font-mono text-[10px] text-[#1D4FAA] uppercase tracking-widest mb-0.5">
+                {jdAddedCount <= 1 ? 'Job description indexed' : 'New JD indexed'}
+              </p>
               <p className="text-xs text-[#6B6862]">
-                Click "Analyse role fit" to include it in your comparison.
+                {jdAddedCount <= 1
+                  ? 'Click "Analyse role fit" to generate your first fit estimate.'
+                  : 'Click "Analyse role fit" to include it in your comparison.'}
               </p>
             </div>
             <button
@@ -617,6 +629,10 @@ export default function UploadWorkspace({
                 ? 'Session connected — click to run analysis on indexed documents.'
                 : canAnalyse
                 ? `${indexedCount} document${indexedCount !== 1 ? 's' : ''} indexed · ${totalChunks} evidence chunks ready.`
+                : !hasCV
+                ? 'Upload a CV first, then at least one job description to begin.'
+                : !hasAnyJD
+                ? 'Upload at least one job description to begin analysis.'
                 : 'Upload a CV and at least one job description to begin.'}
             </p>
           </div>

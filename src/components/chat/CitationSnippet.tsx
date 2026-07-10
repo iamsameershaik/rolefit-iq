@@ -1,26 +1,31 @@
 import type { EvidenceSnippetType } from '../../types';
 
-interface Props {
-  citation: EvidenceSnippetType;
-}
+export default function CitationSnippet({ snippet }: { snippet: EvidenceSnippetType }) {
+  const isCV = snippet.sourceType === 'cv';
+  const label = isCV ? 'CV' : (snippet.source ?? 'JD');
 
-export default function CitationSnippet({ citation }: Props) {
   return (
-    <div className="bg-[#0B0B0B] border border-[#1a1a1a] rounded-sm px-3 py-2">
-      <div className="flex items-center gap-2 mb-1">
+    <div className="bg-[#0B0B0B] border border-[#1a1a1a] rounded-sm px-3 py-2.5">
+      <div className="flex items-center gap-2 mb-1.5">
         <span
           className={[
-            'font-mono text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm',
-            citation.sourceType === 'cv'
-              ? 'bg-[#1A7A41]/20 text-[#4CAF70]'
-              : 'bg-[#1D4FAA]/20 text-[#6B9EF8]',
+            'font-mono text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm border',
+            isCV
+              ? 'text-[#4CAF70] border-[#1A7A41]/30 bg-[#1A7A41]/10'
+              : 'text-[#5B9BD5] border-[#1D4FAA]/30 bg-[#1D4FAA]/10',
           ].join(' ')}
         >
-          {citation.sourceType === 'cv' ? 'CV' : 'JD'}
+          {label}
         </span>
-        <span className="font-mono text-[10px] text-[#6B6862]">{citation.source}</span>
+        {snippet.relevance && (
+          <span className="font-mono text-[9px] text-[#444]">
+            {snippet.relevance}
+          </span>
+        )}
       </div>
-      <p className="text-[11px] text-[#9A958F] leading-relaxed italic">"{citation.text}"</p>
+      <p className="text-xs text-[#888] italic leading-relaxed">
+        "{snippet.text}"
+      </p>
     </div>
   );
 }
