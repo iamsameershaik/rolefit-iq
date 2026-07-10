@@ -1,51 +1,120 @@
-RoleFit IQ Test Pack
+# RoleFit IQ Test Dataset
 
-This pack contains:
-- 2 synthetic CVs
-- 5 synthetic job descriptions
+This directory contains the synthetic evaluation dataset used to validate and demonstrate RoleFit IQ.
 
-CVs:
-1. CV_01_AI_Engineer_Sample.txt
-2. CV_02_Data_Analyst_Sample.txt
+The documents are intentionally fictional and are designed to provide deterministic test cases for role-fit analysis, retrieval quality, grounded chat, and recommendation workflows.
 
-AI Engineer JDs:
-1. JD_01_AI_Engineer_RAG_Platform.txt
-2. JD_02_AI_Engineer_Automation.txt
-3. JD_03_AI_Engineer_Product.txt
+## Dataset
 
-Data Analyst JDs:
-4. JD_04_Data_Analyst_Product_Analytics.txt
-5. JD_05_Data_Analyst_Operations_BI.txt
+### CVs
 
-Recommended smoke tests:
+- `CV_01_AI_Engineer_Sample.txt`
+- `CV_02_Data_Analyst_Sample.txt`
 
-Test A — Strong AI match
-- CV: CV_01_AI_Engineer_Sample.txt
-- JDs: JD_01, JD_02, JD_03
-Expected: strong/moderate AI fit, good evidence for RAG/React/Python/LLMs, gaps around AWS/Bedrock depth or enterprise scale.
+### Job Descriptions
 
-Test B — Strong data analyst match
-- CV: CV_02_Data_Analyst_Sample.txt
-- JDs: JD_04, JD_05
-Expected: strong data analyst fit, strong SQL/BI/dashboard evidence, weaker AI/RAG evidence.
+#### AI Engineering
 
-Test C — Cross-domain mismatch
-- CV: CV_02_Data_Analyst_Sample.txt
-- JDs: JD_01, JD_02, JD_03
-Expected: weaker AI engineer fit, gaps around LLM systems, RAG, embeddings, production AI apps.
+- `JD_01_AI_Engineer_RAG_Platform.txt`
+- `JD_02_AI_Engineer_Automation.txt`
+- `JD_03_AI_Engineer_Product.txt`
 
-Test D — AI CV against data analyst roles
-- CV: CV_01_AI_Engineer_Sample.txt
-- JDs: JD_04, JD_05
-Expected: some SQL/dashboard/data overlap, but weaker BI/operations analytics match.
+#### Data Analytics
 
-Use these to test:
-- upload/paste flow
-- chunking and embedding
-- role fit analysis
-- real vs demo mode
-- one-JD flow
-- three-JD flow
-- assistant citations
-- rewrite recommendations
-- risk flags and do-not-claim warnings
+- `JD_04_Data_Analyst_Product_Analytics.txt`
+- `JD_05_Data_Analyst_Operations_BI.txt`
+
+---
+
+## Recommended Test Scenarios
+
+### Test A — Strong AI Engineer Match
+
+**CV**
+
+- `CV_01_AI_Engineer_Sample.txt`
+
+**Job Descriptions**
+
+- `JD_01_AI_Engineer_RAG_Platform.txt`
+- `JD_02_AI_Engineer_Automation.txt`
+- `JD_03_AI_Engineer_Product.txt`
+
+**Expected outcome**
+
+- Strong to moderate role fit
+- Strong evidence for Python, React, TypeScript, RAG, and LLM engineering
+- Minor gaps around enterprise-scale deployment and AWS Bedrock experience
+
+---
+
+### Test B — Strong Data Analyst Match
+
+**CV**
+
+- `CV_02_Data_Analyst_Sample.txt`
+
+**Job Descriptions**
+
+- `JD_04_Data_Analyst_Product_Analytics.txt`
+- `JD_05_Data_Analyst_Operations_BI.txt`
+
+**Expected outcome**
+
+- Strong data analyst fit
+- Strong SQL, BI, dashboard, and reporting evidence
+- Limited evidence for AI engineering capabilities
+
+---
+
+### Test C — Cross-Domain Mismatch
+
+**CV**
+
+- `CV_02_Data_Analyst_Sample.txt`
+
+**Job Descriptions**
+
+- `JD_01_AI_Engineer_RAG_Platform.txt`
+- `JD_02_AI_Engineer_Automation.txt`
+- `JD_03_AI_Engineer_Product.txt`
+
+**Expected outcome**
+
+- Lower AI Engineer fit
+- Skill-gap recommendations around LLM systems, RAG, embeddings, prompt engineering, and production AI applications
+
+---
+
+### Test D — AI Engineer Against Data Analyst Roles
+
+**CV**
+
+- `CV_01_AI_Engineer_Sample.txt`
+
+**Job Descriptions**
+
+- `JD_04_Data_Analyst_Product_Analytics.txt`
+- `JD_05_Data_Analyst_Operations_BI.txt`
+
+**Expected outcome**
+
+- Some transferable evidence for SQL and data analysis
+- Weaker fit for BI reporting, dashboard development, and operational analytics
+
+---
+
+## Validation Coverage
+
+This dataset can be used to validate:
+
+- Document upload and paste workflows
+- Document validation and parsing
+- Chunking and embedding quality
+- Multi-document retrieval
+- Role-fit analysis
+- Single and multi-job comparison
+- Grounded assistant responses with citations
+- CV rewrite recommendations
+- Risk flags and "Do Not Claim" guidance
+- Demo mode and regression testing
