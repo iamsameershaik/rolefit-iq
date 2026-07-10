@@ -10,7 +10,7 @@ RoleFit IQ should feel like a precision software instrument: serious, academic, 
 
 **Evidence-first career intelligence.**
 
-RoleFit IQ is an evidence engine for comparing a CV against multiple job descriptions. It should feel less like a chatbot and more like a senior engineer reviewing an application systemically.
+RoleFit IQ is an evidence engine for comparing a CV against multiple job descriptions. It should feel less like a chatbot and more like a senior engineer reviewing an application systematically.
 
 ## User Promise
 
