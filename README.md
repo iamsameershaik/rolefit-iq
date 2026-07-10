@@ -79,3 +79,9 @@ The current manual QA coverage and future automation path are in [TESTING.md](TE
 - [QA checklist](docs/quality/qa-checklist.md)
 - [Productionisation plan](docs/operations/productionisation-plan.md)
 - [Demo asset guidance](docs/demo/asset-guidance.md)
+
+## Brand and product identity
+
+RoleFit IQ uses a restrained visual identity inspired by Sony industrial design, Braun minimalism, and modern developer tools. The missing-square mark represents the final fit between a candidate profile and a role.
+
+See [`docs/BRAND-GUIDELINES.md`](./docs/BRAND-GUIDELINES.md) for the brand system.
