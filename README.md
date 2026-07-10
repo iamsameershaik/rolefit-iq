@@ -70,6 +70,19 @@ npm run build
 
 The current manual QA coverage and future automation path are in [TESTING.md](TESTING.md).
 
+## Synthetic test dataset
+
+A reusable synthetic evaluation dataset is included in [test-data](./test-data).
+
+It contains two synthetic CVs and five synthetic job descriptions spanning AI Engineering and Data Analytics roles. The dataset is intended for smoke testing, regression testing, reproducing the demo, and validating role-fit analysis across multiple scenarios.
+
+Example scenarios include:
+
+- Strong AI Engineer match
+- Strong Data Analyst match
+- Cross-domain mismatch
+- Multi-job-description comparison
+
 ## Documentation
 
 - [Documentation index](docs/index.md)
@@ -79,6 +92,7 @@ The current manual QA coverage and future automation path are in [TESTING.md](TE
 - [QA checklist](docs/quality/qa-checklist.md)
 - [Productionisation plan](docs/operations/productionisation-plan.md)
 - [Demo assets and screenshots](docs/demo/asset-guidance.md)
+- [Synthetic test dataset](test-data/README.md)
 
 ## Brand and product identity
 
