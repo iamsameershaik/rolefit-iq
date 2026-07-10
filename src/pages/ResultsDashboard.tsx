@@ -409,7 +409,7 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
           </div>
 
           {/* Full-width black assistant section */}
-          <div className="-mx-4 sm:-mx-6 lg:-mx-8 bg-black px-4 sm:px-6 lg:px-8 py-6">
+          <div className="-mx-4 sm:-mx-6 lg:-mx-24 bg-black px-4 sm:px-6 lg:px-8 py-6">
             <div className="max-w-7xl mx-auto">
               <p className="font-mono text-[10px] uppercase tracking-widest text-[#666] mb-3">
                 {isRealMode ? (displayAnalyses.length >= 2 ? '06' : '05') : '06'} · Grounded assistant
