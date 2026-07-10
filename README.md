@@ -84,4 +84,4 @@ The current manual QA coverage and future automation path are in [TESTING.md](TE
 
 RoleFit IQ uses a restrained visual identity inspired by Sony industrial design, Braun minimalism, and modern developer tools. The missing-square mark represents the final fit between a candidate profile and a role.
 
-See [`BRAND-GUIDELINES.md`](./docs/BRAND-GUIDELINES.md) for the brand system.
+See [BRAND-GUIDELINES.md](./docs/BRAND-GUIDELINES.md) for the brand system.
