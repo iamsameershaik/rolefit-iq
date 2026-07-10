@@ -141,7 +141,7 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
   return (
     <>
     <div className="bg-[#F4F1EA] min-h-screen">
-      <div className="border-b border-[#DDD8CE] bg-white">
+      <div className="bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
           <div className="flex items-center justify-between mb-4">
             <button
@@ -196,7 +196,7 @@ export default function ResultsDashboard({ onNavigate, sessionId, onNewWorkspace
         </div>
       </div>
 
-      <RetroColorBars height="h-1.5" />
+      <RetroColorBars height="h-2.5" />
 
       {loading && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
