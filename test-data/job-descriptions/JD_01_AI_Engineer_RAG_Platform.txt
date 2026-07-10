@@ -1,0 +1,36 @@
+AI Engineer — RAG Platform
+Company: VectorWorks AI
+Location: London / Hybrid
+Salary: £55,000 – £75,000
+
+ABOUT THE ROLE
+VectorWorks AI is building retrieval-augmented AI products for professional services teams. We are hiring an AI Engineer to design and ship production-ready LLM systems that can ingest documents, retrieve relevant evidence, and generate grounded answers with citations.
+
+RESPONSIBILITIES
+- Build document ingestion, chunking, embedding, and vector retrieval pipelines for uploaded PDFs, DOCX files, and text documents.
+- Develop backend services in Python using FastAPI or similar frameworks.
+- Integrate OpenAI, Anthropic, or equivalent LLM APIs into production workflows.
+- Design prompts, structured outputs, evaluation datasets, and guardrails to reduce hallucination and improve trust.
+- Build or support frontend interfaces in React and TypeScript for document upload, chat, citation display, and analysis dashboards.
+- Implement logging, error handling, rate limits, and monitoring for AI workflows.
+- Collaborate with product managers, designers, and customer-facing teams to understand user requirements.
+- Document architecture decisions, model trade-offs, and known limitations.
+
+REQUIRED SKILLS
+- Strong Python engineering experience.
+- Experience with LLM APIs, embeddings, RAG, vector databases, and prompt engineering.
+- SQL and PostgreSQL experience.
+- Familiarity with pgvector, Pinecone, Weaviate, or similar vector stores.
+- Experience building APIs and integrating with modern frontend applications.
+- Understanding of evaluation, grounding, citation quality, and responsible AI practices.
+- Strong communication and ability to explain technical trade-offs.
+
+NICE TO HAVE
+- React and TypeScript experience.
+- Supabase, serverless functions, or cloud deployment experience.
+- Experience with LangChain, LlamaIndex, or custom orchestration.
+- Docker, CI/CD, and observability tooling.
+- Prior experience in legal, finance, consulting, or enterprise knowledge workflows.
+
+INTERVIEW FOCUS
+Candidates should be ready to discuss one AI system they built end-to-end, including data ingestion, chunking decisions, embedding choice, retrieval strategy, prompting, evaluation, failure modes, and productionisation trade-offs.
