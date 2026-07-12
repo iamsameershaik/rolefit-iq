@@ -160,7 +160,7 @@ export function extractJDMetadata(text: string): JDMetadata {
   let role_title: string | undefined;
   const titlePatterns = [
     /(?:job title|role|position)[:\s]+([^\n]{5,80})/i,
-    /^((?:Senior|Junior|Lead|Principal|Staff)?\s*[A-Z][a-zA-Z\s/]{4,60})$/,
+    /^((?:Senior|Junior|Lead|Principal|Staff)?\s*[A-Z][a-zA-Z\s\/]{4,60})$/,
   ];
   for (const p of titlePatterns) {
     const m = firstMatch(text.slice(0, 400), p);

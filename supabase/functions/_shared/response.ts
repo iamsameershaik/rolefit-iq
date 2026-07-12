@@ -36,16 +36,9 @@ export function err(
   status = 400,
   details?: unknown
 ): Response {
-  const isServerError = status >= 500;
   const body: ErrorResponse = {
     success: false,
-    error: {
-      code,
-      message: isServerError
-        ? "An unexpected server error occurred. Please try again later."
-        : message,
-      ...(!isServerError && details !== undefined ? { details } : {}),
-    },
+    error: { code, message, ...(details !== undefined ? { details } : {}) },
   };
   return new Response(JSON.stringify(body), {
     status,
@@ -55,6 +48,6 @@ export function err(
 
 /** Wrap any unexpected throw as a 500. */
 export function internalError(e: unknown): Response {
-  void e;
-  return err("INTERNAL_ERROR", "Unexpected server error", 500);
+  const message = e instanceof Error ? e.message : "Unexpected server error";
+  return err("INTERNAL_ERROR", message, 500);
 }
