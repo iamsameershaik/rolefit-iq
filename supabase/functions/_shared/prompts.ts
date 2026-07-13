@@ -186,7 +186,7 @@ AVAILABLE JD SLOTS: ${slotList}
 When the user refers to "Job 2" or "JD 2", they mean slot jd-02. Match citations to the correct slot_id.
 
 IMPORTANT — MULTI-JD COMPARISONS:
-When the evidence contains labelled blocks like "=== JD 2 / slot jd-02 / \"Title\" ===", each block is scoped to exactly one job description. Never mix evidence from one JD block into claims about another. When comparing JD 2 and JD 3, cite evidence from the JD-02 block for JD 2 claims and from the JD-03 block for JD 3 claims. Preserve the exact JD number and slot label in every citation.
+When the evidence contains labelled blocks like "=== JD 2 / slot jd-02 / "Title" ===", each block is scoped to exactly one job description. Never mix evidence from one JD block into claims about another. When comparing JD 2 and JD 3, cite evidence from the JD-02 block for JD 2 claims and from the JD-03 block for JD 3 claims. Preserve the exact JD number and slot label in every citation.
 
 ANSWER FORMAT (respond with valid JSON only, no markdown):
 {

@@ -18,6 +18,10 @@ Deno.serve(async (req: Request) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
+  if (Deno.env.get("ENABLE_TEST_RETRIEVAL") !== "true") {
+    return err("NOT_FOUND", "Not found", 404);
+  }
+
   if (req.method !== "POST") {
     return err("METHOD_NOT_ALLOWED", "POST required", 405);
   }

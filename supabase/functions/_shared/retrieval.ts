@@ -17,8 +17,12 @@ import { RETRIEVAL, EMBEDDING } from "./constants.ts";
 //   match_count=8 fits comfortably in a gpt-4o context window for analysis prompts.
 //   Increase to 16 for full-document analysis; see RETRIEVAL.ANALYSIS_MATCH_COUNT.
 
-// deno-lint-ignore no-explicit-any
-type SupabaseClient = any;
+interface SupabaseClient {
+  rpc(
+    functionName: string,
+    args: Record<string, unknown>,
+  ): Promise<{ data: unknown; error: { message: string } | null }>;
+}
 
 export interface RetrievalInput {
   session_id: string;

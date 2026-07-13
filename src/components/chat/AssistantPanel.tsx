@@ -192,8 +192,6 @@ export default function AssistantPanel({ sessionId, jdCount }: Props) {
     }
   }
 
-  const hasMessages = messages.length > 0;
-
   return (
     <div className="bg-black flex flex-col">
       {/* Header */}

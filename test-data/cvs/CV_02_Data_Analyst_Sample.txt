@@ -1,0 +1,50 @@
+Daniel Morgan
+Data Analyst | SQL | Python | BI Dashboards | Commercial Analytics
+Manchester, UK | daniel.morgan@example.com | linkedin.com/in/danielmorgan | github.com/danielmorgan
+
+PROFESSIONAL SUMMARY
+Data Analyst with 4 years of experience turning operational, product, and commercial datasets into decision-ready insight. Strong background in SQL, Python, Power BI, Tableau, Excel, data cleaning, KPI reporting, stakeholder analysis, and dashboard automation. Experienced in building trusted reporting layers, investigating performance trends, communicating findings to non-technical teams, and improving data quality across CRM, sales, marketing, and product datasets.
+
+CORE SKILLS
+Data Analysis: SQL, Python, Pandas, NumPy, Excel, exploratory data analysis, cohort analysis, funnel analysis, variance analysis
+BI & Reporting: Power BI, Tableau, Looker Studio, dashboard design, KPI reporting, DAX, Power Query
+Databases: PostgreSQL, MySQL, SQL Server, BigQuery basics
+Data Engineering Basics: ETL scripts, data cleaning, CSV/JSON processing, scheduled reports, dbt basics
+Business Domains: Sales analytics, marketing analytics, customer operations, product usage analytics, retention analysis
+Communication: Stakeholder workshops, insight storytelling, documentation, requirements gathering, presentation decks
+
+EXPERIENCE
+
+Data Analyst — BrightCart Retail Group
+January 2023 – Present
+- Built Power BI dashboards for sales, margin, inventory, and customer retention KPIs, reducing weekly manual reporting effort by 10 hours across commercial teams.
+- Wrote advanced SQL queries across PostgreSQL and SQL Server to consolidate customer, transaction, product, and campaign data into reusable reporting tables.
+- Analysed conversion funnel performance and identified a checkout drop-off pattern linked to delivery-fee visibility, supporting a UX change that improved conversion by 6%.
+- Created Python scripts with Pandas to clean inconsistent supplier data, standardise product categories, and flag missing cost fields before reporting refreshes.
+- Partnered with finance, marketing, and operations stakeholders to define metrics, document assumptions, and improve confidence in recurring reports.
+
+Junior Data Analyst — HealthBridge Services
+August 2020 – December 2022
+- Produced weekly operational dashboards tracking appointment volumes, cancellation rates, capacity utilisation, and service-level performance.
+- Used SQL and Excel to investigate regional performance differences and identify scheduling inefficiencies across clinics.
+- Automated recurring CSV cleaning and report preparation tasks using Python, reducing monthly reporting preparation time by 35%.
+- Presented insight summaries to non-technical managers, highlighting trends, anomalies, and recommended follow-up actions.
+- Maintained a metric dictionary and reporting documentation to reduce confusion around KPI definitions.
+
+PROJECTS
+
+Customer Retention Dashboard
+- Created an end-to-end Power BI dashboard using SQL extracts and Python-cleaned datasets to track repeat purchase rate, customer lifetime value, churn indicators, and campaign performance.
+
+Marketing Campaign Analysis
+- Analysed email and paid campaign data to compare conversion, revenue, acquisition cost, and retention by channel, producing recommendations for budget reallocation.
+
+Inventory Exception Report
+- Built a Python and SQL workflow that flagged stockouts, overstocked products, missing supplier costs, and slow-moving inventory categories.
+
+EDUCATION
+BSc Mathematics and Statistics — University of Leeds
+
+CERTIFICATIONS
+Microsoft Power BI Data Analyst Associate
+Google Data Analytics Certificate
