@@ -33,6 +33,16 @@ RoleFit IQ is an explainable career intelligence MVP. It compares one CV with up
 | AI | OpenAI embeddings and structured chat completions |
 | Data | Sessions, documents, chunks, analyses, chat, and event records |
 
+## Application Structure
+
+RoleFit IQ is implemented as a full-stack web application using a serverless architecture with clear separation between the client, server-side application logic and data platform.
+
+- `src/` - React and TypeScript frontend responsible for the user interface, document upload, analysis dashboard and grounded chat experience.
+- `supabase/functions/` - Server-side backend implemented using Supabase Edge Functions, responsible for document processing, orchestration, embedding generation, semantic retrieval and LLM interactions.
+- `supabase/migrations/` - PostgreSQL schema, pgvector configuration, database functions and Row Level Security (RLS) policies.
+
+Rather than a dedicated Express or FastAPI service, the backend is implemented using Supabase's managed serverless runtime. This keeps the application architecture simpler while maintaining a clear separation between the frontend, backend services and persistence layer.
+
 ## Architecture
 
 ```mermaid
